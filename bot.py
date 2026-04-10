@@ -145,7 +145,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # 5秒冷却
         if not bh.check_kw_cooldown(kw["id"]):
             log.debug(f"关键词 #{kw['id']} 冷却中，跳过")
-            return
+            continue
 
         replies = kw.get("replies", [])
         if not replies:

@@ -25,7 +25,7 @@ tr:last-child td{border-bottom:none}
 code{font-size:.78rem;background:#f5f5f5;padding:2px 6px;border-radius:4px;word-break:break-all}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem}
 .on{background:#e6f9f0;color:#0f6e56}.off{background:#f5f5f5;color:#888}
-.pending{background:#fff3cd;color:#856404}
+.pending-badge{background:#fff3cd;color:#856404;display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem}
 .type-badge{background:#eeedfe;color:#534ab7;display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem}
 .once-badge{background:#fff3cd;color:#856404;display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;margin-left:4px}
 .expire-badge{background:#fde8e8;color:#a32d2d;display:inline-block;padding:2px 6px;border-radius:8px;font-size:.72rem;margin-left:4px}
@@ -77,19 +77,16 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 .modal h3{font-size:1rem;color:#5b4fcf;margin-bottom:16px;padding-right:30px}
 .modal-close{position:absolute;top:14px;right:18px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#aaa}
 .modal-close:hover{color:#333}
-
 /* 批量操作工具栏 */
-.bulk-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f0eefb;border-radius:8px;margin-bottom:10px;flex-wrap:wrap}
-.bulk-bar span{font-size:.82rem;color:#5b4fcf;font-weight:500}
+.bulk-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0eefb;border-radius:8px;margin-bottom:8px;flex-wrap:wrap}
+.bulk-bar-label{font-size:.82rem;color:#5b4fcf;font-weight:500}
 .bulk-btn{padding:5px 14px;border:none;border-radius:6px;font-size:.8rem;cursor:pointer;white-space:nowrap}
 .bulk-enable{background:#e6f9f0;color:#0f6e56}
 .bulk-disable{background:#eeedfe;color:#534ab7}
 .bulk-delete{background:#fde8e8;color:#a32d2d}
 .bulk-count{font-size:.8rem;color:#888;margin-left:auto}
-/* checkbox 列 */
 td.cb-col,th.cb-col{width:32px;padding:8px 4px 8px 10px}
-input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#5b4fcf}
-
+input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#5b4fcf;padding:0}
 @media(max-width:700px){.g2,.g3,.g4{grid-template-columns:1fr}.reply-item-body{grid-template-columns:1fr}.time-bar{flex-direction:column;align-items:stretch}}
 </style>
 </head>
@@ -115,8 +112,8 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
 <div class="card">
   <div class="tip-box">
     📎 <b>获取 file_id：</b>管理员私聊 Bot 发送图片/视频/文件，Bot 自动回复 file_id 并记录到<a href="/files" target="_blank" style="color:#5b4fcf">文件库</a>。<br>
-    ✏️ <b>文本格式：</b>支持 HTML 格式，使用工具栏插入加粗/斜体/链接等标签，点击👁预览效果。<br>
-    🕐 <b>开始生效时间：</b>设置后关键词/任务在该时间前不会触发，到时自动生效。
+    ✏️ <b>文本格式：</b>支持 HTML，工具栏插入标签，点击👁预览。<br>
+    🕐 <b>开始生效时间：</b>到达设定时间前关键词/任务不触发。
   </div>
 </div>
 
@@ -147,6 +144,7 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
             <option value="1">秒后删除</option><option value="60">分钟后删除</option><option value="3600">小时后删除</option>
           </select>
         </div>
+        <p class="tip">群组文本回复默认10秒删除，此处可覆盖</p>
       </div>
       <div>
         <label>⏱ 关键词自动到期（0=永久）</label>
@@ -160,7 +158,6 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
       <div>
         <label>🕐 开始生效时间（留空=立即）</label>
         <input type="datetime-local" name="kw_start_at">
-        <p class="tip">设置后到该时间才开始响应触发</p>
       </div>
     </div>
     <div style="margin-top:16px">
@@ -177,56 +174,41 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
       <span style="font-size:.85rem;color:#888">共 {{ keywords|length }} 条规则</span>
       <input class="search" id="kw-search" placeholder="搜索关键词…" oninput="filterTable('kw-search','kw-table')">
     </div>
-
-    <!-- 批量操作栏 -->
-    <form method="post" action="/kw/bulk" id="kw-bulk-form">
-      <div class="bulk-bar">
-        <span>批量操作：</span>
-        <button type="submit" name="action" value="enable" class="bulk-btn bulk-enable" onclick="return confirmBulk('启用')">✅ 启用</button>
-        <button type="submit" name="action" value="disable" class="bulk-btn bulk-disable" onclick="return confirmBulk('停用')">⏸ 停用</button>
-        <button type="submit" name="action" value="delete" class="bulk-btn bulk-delete" onclick="return confirmBulk('删除')">🗑 删除</button>
-        <span class="bulk-count" id="kw-sel-count">已选 0 条</span>
-      </div>
-      <table id="kw-table">
-        <tr>
-          <th class="cb-col"><input type="checkbox" class="row-cb" onchange="toggleAll(this,'kw-cb','kw-sel-count')"></th>
-          <th>关键词</th><th>匹配</th><th>模式</th><th>回复数</th><th>首条预览</th><th>状态</th><th>操作</th>
-        </tr>
-        {% for kw in keywords %}
-        <tr>
-          <td class="cb-col"><input type="checkbox" class="row-cb kw-cb" name="ids" value="{{ kw.id }}" onchange="updateCount('kw-cb','kw-sel-count')"></td>
-          <td>
-            <code>{{ kw.pattern }}</code>
-            {% if kw.expire_at %}<span class="expire-badge" title="到期：{{ kw.expire_at }}">⏱到期</span>{% endif %}
-            {% if kw.start_at %}<span class="start-badge" title="生效：{{ kw.start_at }}">🕐待生效</span>{% endif %}
-          </td>
-          <td>{{ kw.match }}</td>
-          <td><span class="badge {{ 'on' if kw.mode=='all' else 'off' }}">{{ '全部' if kw.mode=='all' else '随机' }}</span></td>
-          <td style="text-align:center"><b style="color:#5b4fcf">{{ kw.replies|length }}</b>条</td>
-          <td>
-            {% if kw.replies %}{% set r=kw.replies[0] %}
-              <span class="type-badge">{{ r.reply_type }}</span>
-              {% if r.reply_type=='text' %}{{ (r.reply_text or '')[:24] }}{% if (r.reply_text or '')|length>24 %}…{% endif %}
-              {% else %}<code>{{ (r.reply_file_id or '')[:16] }}…</code>{% endif %}
-              {% if kw.replies|length>1 %}<span style="color:#aaa;font-size:.74rem"> +{{ kw.replies|length-1 }}条</span>{% endif %}
-            {% else %}<span style="color:#ccc">无回复</span>{% endif %}
-          </td>
-          <td>
-            {% if kw.start_at and kw.active %}
-              <span class="badge pending">待生效</span>
-            {% else %}
-              <span class="badge {{ 'on' if kw.active else 'off' }}">{{ '启用' if kw.active else '停用' }}</span>
-            {% endif %}
-          </td>
-          <td>
-            <button class="btn btn-edit" onclick="openKwEdit({{ kw.id }})">编辑</button>
-            <a class="btn btn-tog" href="/kw/toggle/{{ kw.id }}">{{ '停用' if kw.active else '启用' }}</a>
-            <a class="btn btn-del" href="/kw/delete/{{ kw.id }}" onclick="return confirm('确认删除？')">删除</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-    </form>
+    <!-- Bug 2 修复：批量操作 form 独立，不包裹 table，通过 JS 收集 ids 提交 -->
+    <div class="bulk-bar">
+      <span class="bulk-bar-label">批量操作：</span>
+      <button type="button" class="bulk-btn bulk-enable"  onclick="doBulk('kw','enable')">✅ 启用</button>
+      <button type="button" class="bulk-btn bulk-disable" onclick="doBulk('kw','disable')">⏸ 停用</button>
+      <button type="button" class="bulk-btn bulk-delete"  onclick="doBulk('kw','delete')">🗑 删除</button>
+      <span class="bulk-count" id="kw-sel-count">已选 0 条</span>
+    </div>
+    <table id="kw-table">
+      <tr>
+        <th class="cb-col"><input type="checkbox" class="row-cb" id="kw-all-cb" onchange="toggleAll('kw')"></th>
+        <th>关键词</th><th>匹配</th><th>模式</th><th>回复数</th><th>状态</th><th>操作</th>
+      </tr>
+      {% for kw in keywords %}
+      <tr data-id="{{ kw.id }}" data-start="{{ kw.start_at or '' }}">
+        <td class="cb-col"><input type="checkbox" class="row-cb kw-cb" value="{{ kw.id }}" onchange="updateCount('kw')"></td>
+        <td>
+          <code>{{ kw.pattern }}</code>
+          {% if kw.expire_at %}<span class="expire-badge" title="到期：{{ kw.expire_at }}">⏱到期</span>{% endif %}
+          {% if kw.start_at %}<span class="start-badge" title="生效：{{ kw.start_at }}">🕐待生效</span>{% endif %}
+        </td>
+        <td>{{ kw.match }}</td>
+        <td><span class="badge {{ 'on' if kw.mode=='all' else 'off' }}">{{ '全部' if kw.mode=='all' else '随机' }}</span></td>
+        <td style="text-align:center"><b style="color:#5b4fcf">{{ kw.replies|length }}</b>条</td>
+        <td class="status-cell">
+          <span class="badge {{ 'on' if kw.active else 'off' }}">{{ '启用' if kw.active else '停用' }}</span>
+        </td>
+        <td>
+          <button type="button" class="btn btn-edit" onclick="openKwEdit({{ kw.id }})">编辑</button>
+          <a class="btn btn-tog" href="/kw/toggle/{{ kw.id }}">{{ '停用' if kw.active else '启用' }}</a>
+          <a class="btn btn-del" href="/kw/delete/{{ kw.id }}" onclick="return confirm('确认删除？')">删除</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
   </div>
   {% else %}
   <p class="empty" style="margin-top:20px">暂无关键词规则</p>
@@ -259,19 +241,16 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
     </div>
     <div id="add-cron-wrap" style="margin-top:4px">
       <div class="time-bar" style="margin-top:12px">
-        <div style="flex:1">
-          <label>Cron 表达式（分 时 日 月 周）</label>
-          <input name="cron" id="cron-input" placeholder="0 9 * * *">
-        </div>
+        <div style="flex:1"><label>Cron 表达式（分 时 日 月 周）</label><input name="cron" id="cron-input" placeholder="0 9 * * *"></div>
         <div><label style="visibility:hidden">占</label><div class="now-time" id="now-time">--:--:--</div></div>
       </div>
       <div class="cron-examples">
-        <span onclick="setCron('*/1 * * * *')">*/1 每分钟</span>
-        <span onclick="setCron('0 * * * *')">0 * 每小时</span>
-        <span onclick="setCron('0 9 * * *')">0 9 每天9点</span>
-        <span onclick="setCron('0 9 * * 1-5')">0 9 1-5 工作日</span>
+        <span onclick="setCron('*/1 * * * *')">每分钟</span>
+        <span onclick="setCron('0 * * * *')">每小时</span>
+        <span onclick="setCron('0 9 * * *')">每天9点</span>
+        <span onclick="setCron('0 9 * * 1-5')">工作日9点</span>
         <span onclick="setCron('0 8,12,20 * * *')">8/12/20点</span>
-        <span onclick="setCron('0 0 * * 1')">0 0 1 每周一</span>
+        <span onclick="setCron('0 0 * * 1')">每周一0点</span>
       </div>
     </div>
     <div id="add-once-wrap" style="display:none;margin-top:12px">
@@ -318,7 +297,6 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
       <div>
         <label>🕐 开始生效时间（留空=立即）</label>
         <input type="datetime-local" name="sc_start_at">
-        <p class="tip">到该时间才加载执行，之前不会触发</p>
       </div>
     </div>
     <button class="submit" type="submit">➕ 添加定时任务</button>
@@ -330,52 +308,41 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
       <span style="font-size:.85rem;color:#888">共 {{ schedules|length }} 条任务</span>
       <input class="search" id="sc-search" placeholder="搜索任务名…" oninput="filterTable('sc-search','sc-table')">
     </div>
-
-    <!-- 批量操作栏 -->
-    <form method="post" action="/sc/bulk" id="sc-bulk-form">
-      <div class="bulk-bar">
-        <span>批量操作：</span>
-        <button type="submit" name="action" value="enable" class="bulk-btn bulk-enable" onclick="return confirmBulk('启用')">✅ 启用</button>
-        <button type="submit" name="action" value="disable" class="bulk-btn bulk-disable" onclick="return confirmBulk('停用')">⏸ 停用</button>
-        <button type="submit" name="action" value="delete" class="bulk-btn bulk-delete" onclick="return confirmBulk('删除')">🗑 删除</button>
-        <span class="bulk-count" id="sc-sel-count">已选 0 条</span>
-      </div>
-      <table id="sc-table">
-        <tr>
-          <th class="cb-col"><input type="checkbox" class="row-cb" onchange="toggleAll(this,'sc-cb','sc-sel-count')"></th>
-          <th>任务名</th><th>Chat ID</th><th>时间/Cron</th><th>类型</th><th>内容预览</th><th>状态</th><th>操作</th>
-        </tr>
-        {% for s in schedules %}
-        <tr>
-          <td class="cb-col"><input type="checkbox" class="row-cb sc-cb" name="ids" value="{{ s.id }}" onchange="updateCount('sc-cb','sc-sel-count')"></td>
-          <td>
-            <b>{{ s.name or '未命名' }}</b>
-            {% if s.once %}<span class="once-badge">一次性</span>{% endif %}
-            {% if s.start_at %}<span class="start-badge" title="生效：{{ s.start_at }}">🕐待生效</span>{% endif %}
-          </td>
-          <td><code>{{ s.chat_id }}</code></td>
-          <td><code style="font-size:.74rem">{{ s.cron }}</code></td>
-          <td><span class="type-badge">{{ s.msg_type }}</span></td>
-          <td>
-            {% if s.msg_type=='text' %}{{ (s.msg_text or '')[:30] }}{% if (s.msg_text or '')|length>30 %}…{% endif %}
-            {% else %}<code>{{ (s.msg_file_id or '')[:20] }}…</code>{% endif %}
-          </td>
-          <td>
-            {% if s.start_at and s.active %}
-              <span class="badge pending">待生效</span>
-            {% else %}
-              <span class="badge {{ 'on' if s.active else 'off' }}">{{ '启用' if s.active else '停用' }}</span>
-            {% endif %}
-          </td>
-          <td>
-            <button class="btn btn-edit" onclick="openScEdit({{ s.id }})">编辑</button>
-            <a class="btn btn-tog" href="/sc/toggle/{{ s.id }}">{{ '停用' if s.active else '启用' }}</a>
-            <a class="btn btn-del" href="/sc/delete/{{ s.id }}" onclick="return confirm('确认删除？')">删除</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-    </form>
+    <!-- Bug 2 修复：批量 form 独立 -->
+    <div class="bulk-bar">
+      <span class="bulk-bar-label">批量操作：</span>
+      <button type="button" class="bulk-btn bulk-enable"  onclick="doBulk('sc','enable')">✅ 启用</button>
+      <button type="button" class="bulk-btn bulk-disable" onclick="doBulk('sc','disable')">⏸ 停用</button>
+      <button type="button" class="bulk-btn bulk-delete"  onclick="doBulk('sc','delete')">🗑 删除</button>
+      <span class="bulk-count" id="sc-sel-count">已选 0 条</span>
+    </div>
+    <table id="sc-table">
+      <tr>
+        <th class="cb-col"><input type="checkbox" class="row-cb" id="sc-all-cb" onchange="toggleAll('sc')"></th>
+        <th>任务名</th><th>Chat ID</th><th>Cron/时间</th><th>类型</th><th>状态</th><th>操作</th>
+      </tr>
+      {% for s in schedules %}
+      <tr data-id="{{ s.id }}" data-start="{{ s.start_at or '' }}">
+        <td class="cb-col"><input type="checkbox" class="row-cb sc-cb" value="{{ s.id }}" onchange="updateCount('sc')"></td>
+        <td>
+          <b>{{ s.name or '未命名' }}</b>
+          {% if s.once %}<span class="once-badge">一次性</span>{% endif %}
+          {% if s.start_at %}<span class="start-badge" title="生效：{{ s.start_at }}">🕐待生效</span>{% endif %}
+        </td>
+        <td><code>{{ s.chat_id }}</code></td>
+        <td><code style="font-size:.74rem">{{ s.cron }}</code></td>
+        <td><span class="type-badge">{{ s.msg_type }}</span></td>
+        <td class="status-cell">
+          <span class="badge {{ 'on' if s.active else 'off' }}">{{ '启用' if s.active else '停用' }}</span>
+        </td>
+        <td>
+          <button type="button" class="btn btn-edit" onclick="openScEdit({{ s.id }})">编辑</button>
+          <a class="btn btn-tog" href="/sc/toggle/{{ s.id }}">{{ '停用' if s.active else '启用' }}</a>
+          <a class="btn btn-del" href="/sc/delete/{{ s.id }}" onclick="return confirm('确认删除？')">删除</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
   </div>
   {% else %}
   <p class="empty" style="margin-top:20px">暂无定时任务</p>
@@ -413,7 +380,7 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
       <td><span class="badge {{ 'on' if r.active else 'off' }}">{{ '启用' if r.active else '停用' }}</span></td>
       <td>
         <a class="btn btn-tog" href="/ban_rules/toggle/{{ r.id }}">{{ '停用' if r.active else '启用' }}</a>
-        <a class="btn btn-del" href="/ban_rules/delete/{{ r.id }}" onclick="return confirm('确认删除？')">删除</a>
+        <a class="btn btn-del" href="/ban_rules/delete/{{ r.id }}" onclick="return confirm('确认删除该规则？')">删除</a>
       </td>
     </tr>
     {% endfor %}
@@ -463,7 +430,7 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
           </div>
           <label style="margin-top:8px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;color:#555;margin-bottom:0">
             <input type="checkbox" id="e-kw-clear-expire" style="width:auto;padding:0;margin:0" onchange="toggleClearExpire(this)">
-            清除到期时间（改为永久有效）
+            清除到期时间（永久有效）
           </label>
           <p class="tip" id="e-kw-expire-tip" style="display:none;color:#0f6e56;margin-top:4px">✅ 保存后该关键词将永久有效</p>
         </div>
@@ -576,7 +543,24 @@ function updateClock(){
 setInterval(updateClock,1000); updateClock();
 function setCron(v){const el=document.getElementById('cron-input');if(el){el.value=v;el.focus();}}
 
-// 搜索
+// Bug 1 修复：每分钟检查 start_at 是否已到，到了则更新徽章显示
+function checkStartBadges(){
+  const now=new Date();
+  document.querySelectorAll('tr[data-start]').forEach(tr=>{
+    const s=tr.dataset.start;
+    if(!s) return;
+    const startDt=new Date(s.replace(' ','T'));
+    if(now>=startDt){
+      // 移除"待生效"徽章
+      tr.querySelectorAll('.start-badge').forEach(b=>b.remove());
+      // 检查状态列是否需要还原（移除 pending 样式），只处理展示，不改DB
+    }
+  });
+}
+setInterval(checkStartBadges,60000);
+checkStartBadges();
+
+// 表格搜索
 function filterTable(inputId,tableId){
   const q=document.getElementById(inputId).value.toLowerCase();
   document.querySelectorAll('#'+tableId+' tr:not(:first-child)').forEach(tr=>{
@@ -584,25 +568,40 @@ function filterTable(inputId,tableId){
   });
 }
 
-// ======== 批量操作 ========
-function toggleAll(masterCb, cbClass, countId){
-  document.querySelectorAll('.'+cbClass).forEach(cb=>{
+// ======== Bug 2 修复：批量操作完全独立，用 JS 动态构建 form 提交 ========
+function doBulk(type, action){
+  const cbClass = type+'-cb';
+  const checked = [...document.querySelectorAll('.'+cbClass+':checked')];
+  if(checked.length===0){alert('请先勾选要操作的条目');return;}
+  if(action==='delete'&&!confirm(`确认删除选中的 ${checked.length} 条？此操作不可撤销。`)) return;
+  if((action==='enable'||action==='disable')&&!confirm(`确认${action==='enable'?'启用':'停用'}选中的 ${checked.length} 条？`)) return;
+  const f=document.createElement('form');
+  f.method='post';
+  f.action=`/${type==='kw'?'kw':'sc'}/bulk`;
+  const actionInput=document.createElement('input');
+  actionInput.type='hidden'; actionInput.name='action'; actionInput.value=action;
+  f.appendChild(actionInput);
+  checked.forEach(cb=>{
+    const inp=document.createElement('input');
+    inp.type='hidden'; inp.name='ids'; inp.value=cb.value;
+    f.appendChild(inp);
+  });
+  document.body.appendChild(f);
+  f.submit();
+}
+
+function toggleAll(type){
+  const masterCb=document.getElementById(type+'-all-cb');
+  document.querySelectorAll('.'+type+'-cb').forEach(cb=>{
     if(cb.closest('tr').style.display!=='none') cb.checked=masterCb.checked;
   });
-  updateCount(cbClass, countId);
+  updateCount(type);
 }
-function updateCount(cbClass, countId){
-  const n=document.querySelectorAll('.'+cbClass+':checked').length;
-  const el=document.getElementById(countId);
+
+function updateCount(type){
+  const n=document.querySelectorAll('.'+type+'-cb:checked').length;
+  const el=document.getElementById(type+'-sel-count');
   if(el) el.textContent='已选 '+n+' 条';
-}
-function confirmBulk(action){
-  const formId = action==='删除'?'kw-bulk-form':'kw-bulk-form'; // 由 onclick 上下文决定
-  // 通过 form 内勾选数量判断
-  const checked = document.querySelectorAll('input[type=checkbox].row-cb:checked').length;
-  if(checked===0){alert('请先勾选要操作的条目');return false;}
-  if(action==='删除') return confirm(`确认删除选中的 ${checked} 条？此操作不可撤销。`);
-  return true;
 }
 
 // Markdown 工具栏
@@ -633,7 +632,7 @@ function togglePreview(id){
   if(w.style.display==='block') updatePreview(id);
 }
 
-// 定时任务显隐
+// 定时任务表单显隐
 function toggleScFields(sel,prefix){
   const t=sel.value,isText=t==='text',isSticker=t==='sticker';
   _show(prefix+'-text-row',isText); _show(prefix+'-file-row',!isText); _show(prefix+'-caption-row',!isText&&!isSticker);
@@ -651,25 +650,25 @@ function beforeScSubmit(mode){
   if(!isOnce){
     const cronId=mode==='add'?'cron-input':'e-sc-cron';
     const val=(document.getElementById(cronId)?.value||'').trim();
-    const parts=val.split(/\s+/);
-    if(parts.length!==5){alert(`❌ Cron 格式错误！\n需要5个字段，当前${parts.length}个\n示例：0 9 * * * 每天9点`);return false;}
+    if(val.split(/\s+/).length!==5){alert('❌ Cron 格式错误！需要5个字段\n示例：0 9 * * * 每天9点');return false;}
   }
   return true;
 }
 
-// 回复编辑器
+// ======== Bug 4 修复：回复编辑器用索引重排保证 name 唯一连续 ========
 const REPLY_TYPES=[['text','📝 文本'],['photo','🖼 图片'],['video','🎬 视频'],['audio','🎵 音频'],['document','📄 文件'],['animation','🎞 动图GIF'],['voice','🎤 语音'],['sticker','🎭 贴纸']];
+
 function addReplyItem(editorId,ns,data,idxOverride){
   const ed=document.getElementById(editorId); if(!ed) return;
   const i=idxOverride!==undefined?idxOverride:ed.children.length;
-  const typeOpts=REPLY_TYPES.map(([v,l])=>`<option value="${v}" ${(data?.reply_type||'text')===v?'selected':''}>${l}</option>`).join('');
   const isText=(data?.reply_type||'text')==='text',isSticker=data?.reply_type==='sticker';
   const div=document.createElement('div'); div.className='reply-item';
   const tid=`${ns}-rtext-${i}`;
+  const typeOpts=REPLY_TYPES.map(([v,l])=>`<option value="${v}"${(data?.reply_type||'text')===v?' selected':''}>${l}</option>`).join('');
   div.innerHTML=`
     <div class="reply-item-header">
       <span class="reply-item-label">第 ${i+1} 条回复</span>
-      <button type="button" class="btn-rm" onclick="this.closest('.reply-item').remove();renumberReplies('${editorId}')">移除</button>
+      <button type="button" class="btn-rm" onclick="removeReply(this,'${editorId}','${ns}')">移除</button>
     </div>
     <div class="reply-item-body">
       <div>
@@ -699,24 +698,62 @@ function addReplyItem(editorId,ns,data,idxOverride){
     </div>`;
   ed.appendChild(div);
 }
+
+// Bug 4 修复：移除后重新编号，同时重建所有 name 属性保证索引连续
+function removeReply(btn, editorId, ns){
+  btn.closest('.reply-item').remove();
+  rebuildReplyNames(editorId, ns);
+}
+
+function rebuildReplyNames(editorId, ns){
+  const ed=document.getElementById(editorId); if(!ed) return;
+  const items=[...ed.querySelectorAll('.reply-item')];
+  items.forEach((item,i)=>{
+    // 更新序号标签
+    const label=item.querySelector('.reply-item-label');
+    if(label) label.textContent=`第 ${i+1} 条回复`;
+    // 重建所有 name 属性（核心修复）
+    const sel=item.querySelector('select[name^="reply_type_"]');
+    const ta=item.querySelector('textarea[name^="reply_text_"]');
+    const fid=item.querySelector('input[name^="reply_file_id_"]');
+    const cap=item.querySelector('input[name^="reply_caption_"]');
+    if(sel) sel.name=`reply_type_${i}`;
+    if(ta){
+      ta.name=`reply_text_${i}`;
+      ta.id=`${ns}-rtext-${i}`;
+      // 更新 oninput
+      ta.setAttribute('oninput',`updatePreview('${ns}-rtext-${i}')`);
+    }
+    if(fid) fid.name=`reply_file_id_${i}`;
+    if(cap) cap.name=`reply_caption_${i}`;
+    // 更新包裹 div 的 id
+    const textWrap=item.querySelector('[id$="-rtext-wrap-"]')||item.querySelector(`[id^="${ns}-rtext-wrap-"]`);
+    const fileWrap=item.querySelector(`[id^="${ns}-rfile-wrap-"]`);
+    const capWrap=item.querySelector(`[id^="${ns}-rcap-wrap-"]`);
+    if(textWrap) textWrap.id=`${ns}-rtext-wrap-${i}`;
+    if(fileWrap) fileWrap.id=`${ns}-rfile-wrap-${i}`;
+    if(capWrap)  capWrap.id=`${ns}-rcap-wrap-${i}`;
+    // 更新 onchange
+    if(sel) sel.setAttribute('onchange',`toggleReplyFields(this,${i},'${ns}')`);
+  });
+}
+
 function toggleReplyFields(sel,i,ns){
   const t=sel.value,isText=t==='text',isSticker=t==='sticker';
-  _show(`${ns}-rtext-wrap-${i}`,isText); _show(`${ns}-rfile-wrap-${i}`,!isText); _show(`${ns}-rcap-wrap-${i}`,!isText&&!isSticker);
-}
-function renumberReplies(editorId){
-  document.querySelectorAll('#'+editorId+' .reply-item-label').forEach((sp,i)=>{sp.textContent=`第 ${i+1} 条回复`;});
+  _show(`${ns}-rtext-wrap-${i}`,isText);
+  _show(`${ns}-rfile-wrap-${i}`,!isText);
+  _show(`${ns}-rcap-wrap-${i}`,!isText&&!isSticker);
 }
 
 // 清除到期时间
 function toggleClearExpire(cb){
-  const valEl=document.getElementById('e-kw-exp-val');
-  const unitEl=document.getElementById('e-kw-exp-unit');
-  const tipEl=document.getElementById('e-kw-expire-tip');
-  if(cb.checked){valEl.value=-1;valEl.disabled=true;unitEl.disabled=true;if(tipEl)tipEl.style.display='block';}
-  else{valEl.value=0;valEl.disabled=false;unitEl.disabled=false;if(tipEl)tipEl.style.display='none';}
+  const v=document.getElementById('e-kw-exp-val');
+  const u=document.getElementById('e-kw-exp-unit');
+  const t=document.getElementById('e-kw-expire-tip');
+  if(cb.checked){v.value=-1;v.disabled=true;u.disabled=true;if(t)t.style.display='block';}
+  else{v.value=0;v.disabled=false;u.disabled=false;if(t)t.style.display='none';}
 }
 
-// datetime-local → "YYYY-MM-DD HH:MM" 格式转换（输入控件用 T，展示用空格）
 function toDatetimeLocal(str){
   if(!str) return '';
   return str.replace(' ','T').substring(0,16);
@@ -732,10 +769,8 @@ function openKwEdit(id){
     document.getElementById('e-kw-mode-all').checked=d.mode==='all';
     _fillDuration(d.delete_after_seconds,'e-kw-del-val','e-kw-del-unit');
     _fillDuration(d.expire_after_seconds,'e-kw-exp-val','e-kw-exp-unit');
-    // 生效时间
     const startEl=document.getElementById('e-kw-start-at');
     if(startEl) startEl.value=toDatetimeLocal(d.start_at||'');
-    // 重置清除勾选框
     const cb=document.getElementById('e-kw-clear-expire');
     const tip=document.getElementById('e-kw-expire-tip');
     if(cb){cb.checked=false;document.getElementById('e-kw-exp-val').disabled=false;document.getElementById('e-kw-exp-unit').disabled=false;if(tip)tip.style.display='none';}
@@ -743,7 +778,7 @@ function openKwEdit(id){
     ed.innerHTML='';
     (d.replies||[{reply_type:'text'}]).forEach((r,i)=>addReplyItem('edit-kw-replies-editor','edit-kw',r,i));
     document.getElementById('kw-modal').classList.add('show');
-  }).catch(()=>alert('获取数据失败'));
+  }).catch(e=>{console.error(e);alert('获取数据失败，请检查网络');});
 }
 
 // 定时任务编辑弹窗
@@ -765,20 +800,19 @@ function openScEdit(id){
     const fidEl=document.getElementById('e-sc-fid'); if(fidEl) fidEl.value=d.msg_file_id||'';
     const capEl=document.getElementById('e-sc-cap'); if(capEl){capEl.value=d.msg_caption||''; updatePreview('e-sc-cap');}
     _fillDuration(d.delete_after_seconds,'e-sc-del-val','e-sc-del-unit');
-    // 生效时间
     const startEl=document.getElementById('e-sc-start-at');
     if(startEl) startEl.value=toDatetimeLocal(d.start_at||'');
     document.getElementById('sc-modal').classList.add('show');
-  }).catch(()=>alert('获取数据失败'));
+  }).catch(e=>{console.error(e);alert('获取数据失败，请检查网络');});
 }
 
 function _fillDuration(seconds,valId,unitId){
-  const valEl=document.getElementById(valId); const unitEl=document.getElementById(unitId);
-  if(!valEl||!unitEl) return;
-  if(!seconds){valEl.value=0;return;}
-  if(seconds>=3600&&seconds%3600===0){unitEl.value=3600;valEl.value=seconds/3600;}
-  else if(seconds>=60&&seconds%60===0){unitEl.value=60;valEl.value=seconds/60;}
-  else{unitEl.value=1;valEl.value=seconds;}
+  const v=document.getElementById(valId); const u=document.getElementById(unitId);
+  if(!v||!u) return;
+  if(!seconds){v.value=0;return;}
+  if(seconds>=3600&&seconds%3600===0){u.value=3600;v.value=seconds/3600;}
+  else if(seconds>=60&&seconds%60===0){u.value=60;v.value=seconds/60;}
+  else{u.value=1;v.value=seconds;}
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('show');}

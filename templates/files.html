@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文件库</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5;padding:20px;color:#333}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+h1{font-size:1.3rem;color:#0f6e56}
+.nav-btns{display:flex;gap:8px;align-items:center}
+.btn-back{font-size:.82rem;background:#0f6e56;color:#fff;text-decoration:none;
+  padding:6px 14px;border-radius:6px}
+.btn-logout{font-size:.82rem;color:#888;text-decoration:none;border:1px solid #ddd;
+  padding:5px 12px;border-radius:6px}
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+table{width:100%;border-collapse:collapse;font-size:.83rem}
+th{text-align:left;padding:8px 10px;background:#e6f9f0;color:#0f6e56;font-weight:500;
+  white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #f5f5f5;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;
+  background:#eeedfe;color:#534ab7}
+.fid-cell{max-width:280px}
+.fid-code{font-size:.74rem;background:#f5f5f5;padding:3px 6px;border-radius:4px;
+  word-break:break-all;cursor:pointer;display:block}
+.fid-code:hover{background:#e6f9f0}
+.copy-tip{font-size:.72rem;color:#0f6e56;display:none;margin-top:2px}
+.search-bar{display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;
+  font-size:.875rem;width:260px}
+.empty{color:#bbb;text-align:center;padding:40px}
+.btn{display:inline-block;padding:4px 10px;border-radius:6px;font-size:.78rem;
+  text-decoration:none;border:none;cursor:pointer;margin-right:3px;white-space:nowrap}
+.btn-del{background:#fde8e8;color:#a32d2d}
+.btn-edit{background:#e6f9f0;color:#0f6e56}
+.btn-save{background:#5b4fcf;color:#fff}
+
+/* 行内编辑 */
+.name-display{cursor:pointer}
+.name-display:hover{color:#5b4fcf;text-decoration:underline}
+.name-edit-form{display:none;align-items:center;gap:6px}
+.name-edit-form input{padding:4px 8px;border:1px solid #5b4fcf;border-radius:4px;
+  font-size:.82rem;width:140px}
+.name-edit-form button{padding:4px 10px;background:#5b4fcf;color:#fff;
+  border:none;border-radius:4px;cursor:pointer;font-size:.78rem}
+.name-edit-form .cancel{background:#eee;color:#555}
+
+/* 用量警告弹窗 */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:100;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px;width:min(480px,90vw);
+  box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.modal h3{font-size:1rem;color:#a32d2d;margin-bottom:12px}
+.modal p{font-size:.875rem;color:#555;line-height:1.6;margin-bottom:12px}
+.usage-list{background:#fde8e8;border-radius:6px;padding:10px 14px;font-size:.82rem;
+  color:#a32d2d;margin-bottom:16px}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.modal-btns a,.modal-btns button{padding:7px 16px;border-radius:6px;font-size:.875rem;
+  text-decoration:none;border:none;cursor:pointer}
+.btn-cancel-m{background:#eee;color:#555}
+.btn-confirm-del{background:#a32d2d;color:#fff}
+</style>
+<script>
+function copyFid(el){
+  navigator.clipboard.writeText(el.innerText).then(()=>{
+    const tip=el.nextElementSibling;
+    tip.style.display='block';
+    setTimeout(()=>tip.style.display='none',1500);
+  });
+}
+
+function filterTable(){
+  const q=document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('#file-table tbody tr').forEach(tr=>{
+    tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none';
+  });
+}
+
+function showNameEdit(id){
+  document.getElementById('name-display-'+id).style.display='none';
+  const form=document.getElementById('name-edit-'+id);
+  form.style.display='flex';
+  form.querySelector('input').focus();
+}
+
+function cancelNameEdit(id){
+  document.getElementById('name-display-'+id).style.display='';
+  document.getElementById('name-edit-'+id).style.display='none';
+}
+
+function checkAndDelete(fid){
+  // 先查询是否有规则在使用该文件
+  fetch('/files/check_usages/'+fid)
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.usages && data.usages.length > 0){
+        // 有引用，显示警告弹窗
+        const list = data.usages.map(u=>
+          `• [${u.type==='keyword'?'关键词':'定时任务'}] ${u.name}`
+        ).join('\n');
+        document.getElementById('modal-usages').innerText = list;
+        document.getElementById('modal-confirm-btn').href = '/files/delete/'+fid;
+        document.getElementById('delete-modal').classList.add('show');
+      } else {
+        // 无引用，直接删除
+        if(confirm('确认删除该文件记录？此操作不可恢复。')){
+          window.location='/files/delete/'+fid;
+        }
+      }
+    })
+    .catch(()=>{
+      if(confirm('确认删除该文件记录？')) window.location='/files/delete/'+fid;
+    });
+}
+
+function closeModal(){
+  document.getElementById('delete-modal').classList.remove('show');
+}
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📁 文件库</h1>
+  <div class="nav-btns">
+    <a class="btn-back" href="/">← 返回管理后台</a>
+    <a class="btn-logout" href="/files/logout">退出</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="search-bar">
+    <input class="search" id="search" placeholder="搜索文件名、类型、上传者…" oninput="filterTable()">
+    <span style="font-size:.8rem;color:#aaa">点击文件名可编辑，点击 file_id 可复制</span>
+  </div>
+
+  {% if records %}
+  <table id="file-table">
+    <thead>
+      <tr>
+        <th>#</th><th>类型</th><th>文件名（点击编辑）</th>
+        <th>尺寸/时长</th><th>大小</th><th>上传者</th>
+        <th>file_id（点击复制）</th><th>时间</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in records %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td><span class="badge">{{ r.file_type }}</span></td>
+
+      <!-- 文件名行内编辑 -->
+      <td>
+        <span class="name-display" id="name-display-{{ r.id }}"
+          onclick="showNameEdit({{ r.id }})"
+          title="点击编辑文件名">
+          {{ r.file_name or '—' }}
+        </span>
+        <form class="name-edit-form" id="name-edit-{{ r.id }}"
+          method="post" action="/files/rename/{{ r.id }}">
+          <input name="file_name" value="{{ r.file_name or '' }}" placeholder="输入新文件名">
+          <button type="submit">保存</button>
+          <button type="button" class="cancel" onclick="cancelNameEdit({{ r.id }})">取消</button>
+        </form>
+      </td>
+
+      <td>
+        {% if r.width and r.height %}{{ r.width }}×{{ r.height }}<br>{% endif %}
+        {% if r.duration %}{{ r.duration }}秒{% endif %}
+        {% if not r.width and not r.duration %}—{% endif %}
+      </td>
+
+      <td style="white-space:nowrap">
+        {% if r.file_size %}
+          {% if r.file_size > 1048576 %}{{ '%.1f'|format(r.file_size/1048576) }} MB
+          {% else %}{{ '%.1f'|format(r.file_size/1024) }} KB{% endif %}
+        {% else %}—{% endif %}
+      </td>
+
+      <td>
+        {% if r.uploader_name %}
+          {{ r.uploader_name }}
+          {% if r.uploader_username %}
+            <br><span style="font-size:.76rem;color:#aaa">@{{ r.uploader_username }}</span>
+          {% endif %}
+        {% else %}—{% endif %}
+      </td>
+
+      <td class="fid-cell">
+        <div class="fid-code" onclick="copyFid(this)">{{ r.file_id }}</div>
+        <span class="copy-tip">✅ 已复制</span>
+      </td>
+
+      <td style="white-space:nowrap;color:#888;font-size:.78rem">{{ r.created_at }}</td>
+
+      <td>
+        <button class="btn btn-del" onclick="checkAndDelete({{ r.id }})">删除</button>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">还没有文件记录，向 Bot 发送媒体文件后会自动出现在这里</p>
+  {% endif %}
+</div>
+
+<!-- 删除确认弹窗（文件被引用时） -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal">
+    <h3>⚠️ 该文件正在被使用</h3>
+    <p>以下关键词/定时任务引用了该文件。删除后，Bot 将无法发送这些内容，并会通知管理员。</p>
+    <div class="usage-list" id="modal-usages"></div>
+    <p style="color:#a32d2d;font-size:.82rem">确认删除后，相关规则不会自动执行，直到更新 file_id。</p>
+    <div class="modal-btns">
+      <button class="btn-cancel-m" onclick="closeModal()">取消</button>
+      <a class="btn-confirm-del" id="modal-confirm-btn" href="#">确认删除</a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -3,7 +3,7 @@ import database as db
 import os
 
 flask_app = Flask(__name__)
-flask_app.secret_key = os.urandom(24)
+flask_app.secret_key = os.getenv("SECRET_KEY", "请修改这个默认值")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 

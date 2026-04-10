@@ -4,19 +4,15 @@ import database as db
 import os
 
 flask_app = Flask(__name__)
-
-# Bug 4 修复：从环境变量读取固定 secret_key，重启不丢 session
 flask_app.secret_key = os.getenv("SECRET_KEY", "change-this-default-secret")
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 
 def _auth_token():
-    """Bug 3 修复：用 SHA256 生成 token，不把明文密码存入 cookie"""
     return hashlib.sha256(f"teletask:{ADMIN_PASSWORD}".encode()).hexdigest()
 
 
-# ======== 登录验证 ========
 def check_auth():
     return request.cookies.get("auth") == _auth_token()
 
@@ -39,13 +35,11 @@ def login():
 def do_login():
     if request.form.get("pwd") == ADMIN_PASSWORD:
         resp = redirect("/")
-        # Bug 3 修复：存 hash token 而非明文密码
         resp.set_cookie("auth", _auth_token(), max_age=86400 * 7, httponly=True)
         return resp
     return redirect("/login?err=1")
 
 
-# ======== 主页 ========
 @flask_app.route("/")
 def index():
     return render_template(
@@ -120,10 +114,16 @@ def _parse_replies(f):
 
 
 def _parse_seconds(f, prefix):
-    """将「数量+单位」表单字段转换为秒数，无效返回 None"""
+    """
+    将「数量+单位」表单字段转换为秒数。
+    特殊值：val == -1 → 返回 -1（表示"清除到期时间"信号）
+    val == 0 或无效 → 返回 None（不设置）
+    """
     try:
         val  = int(f.get(f"{prefix}_value", 0) or 0)
         unit = int(f.get(f"{prefix}_unit",  1) or 1)
+        if val == -1:
+            return -1          # ✅ 传递"清除"信号给 database.update_keyword
         return val * unit if val > 0 else None
     except (ValueError, TypeError):
         return None
@@ -305,7 +305,6 @@ def files_delete(fid):
     return redirect("/files")
 
 
-# Bug 1 修复：调用正确的函数名 get_file_ids_in_use
 @flask_app.route("/files/check_usages/<int:fid>")
 def files_check_usages(fid):
     if not session.get("files_auth"):
@@ -314,11 +313,10 @@ def files_check_usages(fid):
     target  = next((r for r in records if r["id"] == fid), None)
     if not target:
         return jsonify({"usages": [], "file_name": ""})
-    usages = db.get_file_ids_in_use(target["file_id"])  # ← Bug 1 修复
+    usages = db.get_file_ids_in_use(target["file_id"])
     return jsonify({"usages": usages, "file_name": target["file_name"] or ""})
 
 
-# ======== 调试 ========
 @flask_app.route("/debug/routes")
 def debug_routes():
     if not check_auth():

@@ -42,11 +42,11 @@ def _clean(s):
 
 
 def _is_started(start_at_str):
-    """检查 start_at 时间是否已到，None 表示立即生效"""
+    """检查 start_at 是否已到，None 表示立即生效"""
     if not start_at_str:
         return True
     try:
-        start_dt = datetime.strptime(start_at_str, "%Y-%m-%d %H:%M:%S")
+        start_dt = datetime.strptime(str(start_at_str), "%Y-%m-%d %H:%M:%S")
         return datetime.now() >= start_dt
     except Exception:
         return True
@@ -184,9 +184,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                     continue
                 count = bh.get_trigger_count(user_id, rule["window_seconds"])
                 if count >= rule["trigger_count"]:
-                    db.ban_user(user_id,
-                                user.username or "",
-                                user.first_name or "",
+                    db.ban_user(user_id, user.username or "", user.first_name or "",
                                 f"自动Ban: {rule['window_seconds']}秒内触发{count}次")
                     for admin_id in ADMIN_IDS:
                         try:
@@ -252,53 +250,41 @@ async def handle_all(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     file_id = ftype = fname = fsize = mime = w = h = dur = None
 
     if msg.photo:
-        p = msg.photo[-1]
-        file_id, ftype = p.file_id, "photo"
-        w, h, fsize = p.width, p.height, p.file_size
-        fname = f"photo_{p.file_unique_id}.jpg"
+        p = msg.photo[-1]; file_id, ftype = p.file_id, "photo"
+        w, h, fsize = p.width, p.height, p.file_size; fname = f"photo_{p.file_unique_id}.jpg"
     elif msg.video:
-        v = msg.video
-        file_id, ftype = v.file_id, "video"
+        v = msg.video; file_id, ftype = v.file_id, "video"
         w, h, dur, fsize, mime = v.width, v.height, v.duration, v.file_size, v.mime_type
         fname = v.file_name or f"video_{v.file_unique_id}"
     elif msg.audio:
-        a = msg.audio
-        file_id, ftype = a.file_id, "audio"
+        a = msg.audio; file_id, ftype = a.file_id, "audio"
         dur, fsize, mime = a.duration, a.file_size, a.mime_type
         fname = a.file_name or f"audio_{a.file_unique_id}"
     elif msg.document:
-        d = msg.document
-        file_id, ftype = d.file_id, "document"
-        fsize, mime = d.file_size, d.mime_type
-        fname = d.file_name or f"doc_{d.file_unique_id}"
+        d = msg.document; file_id, ftype = d.file_id, "document"
+        fsize, mime = d.file_size, d.mime_type; fname = d.file_name or f"doc_{d.file_unique_id}"
     elif msg.animation:
-        a = msg.animation
-        file_id, ftype = a.file_id, "animation"
+        a = msg.animation; file_id, ftype = a.file_id, "animation"
         w, h, dur, fsize = a.width, a.height, a.duration, a.file_size
         fname = a.file_name or f"gif_{a.file_unique_id}"
     elif msg.voice:
-        v = msg.voice
-        file_id, ftype = v.file_id, "voice"
+        v = msg.voice; file_id, ftype = v.file_id, "voice"
         dur, fsize, mime = v.duration, v.file_size, v.mime_type
         fname = f"voice_{v.file_unique_id}.ogg"
     elif msg.sticker:
-        s = msg.sticker
-        file_id, ftype = s.file_id, "sticker"
-        w, h = s.width, s.height
-        fname = f"sticker_{s.file_unique_id}"
+        s = msg.sticker; file_id, ftype = s.file_id, "sticker"
+        w, h = s.width, s.height; fname = f"sticker_{s.file_unique_id}"
 
     if file_id:
-        db.add_file_record(
-            file_id, ftype, fname, fsize, mime, w, h, dur,
-            uploader_id=user_id,
-            uploader_name=user.first_name if user else "",
-            uploader_username=user.username if user else "",
-        )
+        db.add_file_record(file_id, ftype, fname, fsize, mime, w, h, dur,
+                           uploader_id=user_id,
+                           uploader_name=user.first_name if user else "",
+                           uploader_username=user.username if user else "")
         size_str = ""
         if fsize:
             size_str = f"{fsize/1048576:.1f} MB" if fsize > 1048576 else f"{fsize/1024:.1f} KB"
-        parts = [x for x in [f"{w}×{h}" if w and h else "",
-                              f"{dur}秒" if dur else "", size_str, fname or ""] if x]
+        parts = [x for x in [f"{w}×{h}" if w and h else "", f"{dur}秒" if dur else "",
+                              size_str, fname or ""] if x]
         await msg.reply_text(
             f"✅ <b>{ftype}</b>  {' | '.join(parts)}\n\n<code>{file_id}</code>",
             parse_mode="HTML"
@@ -317,11 +303,8 @@ async def welcome_new_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     new_user  = result.new_chat_member.user
     safe_name = html_module.escape(new_user.first_name or "")
     mention   = f'<a href="tg://user?id={new_user.id}">{safe_name}</a>'
-    await ctx.bot.send_message(
-        chat_id=result.chat.id,
-        text=f"👋 欢迎 {mention} 加入！",
-        parse_mode="HTML"
-    )
+    await ctx.bot.send_message(chat_id=result.chat.id,
+                               text=f"👋 欢迎 {mention} 加入！", parse_mode="HTML")
 
 
 # ======== 管理员命令 ========
@@ -335,10 +318,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🤖 <b>Bot 管理助手</b>\n\n"
         f"👤 管理员：{html_module.escape(user.first_name or '')}\n"
-        f"📋 关键词规则：{kw_count} 条\n"
-        f"⏰ 定时任务：{sc_count} 条\n\n"
-        f"直接发送媒体文件即可获取 file_id。",
-        parse_mode="HTML"
+        f"📋 关键词规则：{kw_count} 条\n⏰ 定时任务：{sc_count} 条\n\n"
+        f"直接发送媒体文件即可获取 file_id。", parse_mode="HTML"
     )
 
 
@@ -354,8 +335,7 @@ async def cmd_keywords(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         status = "✅" if kw["active"] else "❌"
         lines.append(f"{status} <code>{html_module.escape(kw['pattern'])}</code> [{kw['match']}]")
     await update.message.reply_text(
-        f"📋 <b>关键词列表（共{len(kws)}条）</b>\n\n" + "\n".join(lines),
-        parse_mode="HTML"
+        f"📋 <b>关键词列表（共{len(kws)}条）</b>\n\n" + "\n".join(lines), parse_mode="HTML"
     )
 
 
@@ -386,9 +366,8 @@ def make_job(sid, name, chat_id, msg_type, msg_text, msg_file_id, msg_caption,
     async def job():
         log_id = db.log_schedule_start(sid, name)
         try:
-            sent = await guarded_send(
-                bot_app.bot, chat_id, msg_type, msg_text, msg_file_id, msg_caption
-            )
+            sent = await guarded_send(bot_app.bot, chat_id, msg_type,
+                                      msg_text, msg_file_id, msg_caption)
             if sent and delete_after_seconds:
                 asyncio.create_task(
                     bh.delete_later(bot_app.bot, chat_id, sent.message_id, delete_after_seconds)
@@ -409,62 +388,64 @@ def make_job(sid, name, chat_id, msg_type, msg_text, msg_file_id, msg_caption,
     return job
 
 
+def _load_single_schedule(s: dict):
+    """加载单个定时任务到 scheduler"""
+    once = bool(s["once"])
+    cron = s["cron"].strip()
+    try:
+        if once:
+            cron_iso = cron.replace(" ", "T")
+            run_dt   = datetime.fromisoformat(cron_iso)
+            trigger  = DateTrigger(run_date=run_dt, timezone="Asia/Shanghai")
+        else:
+            parts = cron.split()
+            if len(parts) != 5:
+                log.warning(f"⚠️ cron格式错误 #{s['id']}: '{cron}'")
+                return
+            mi, hr, dm, mo, dw = parts
+            trigger = CronTrigger(minute=mi, hour=hr, day=dm, month=mo,
+                                   day_of_week=dw, timezone="Asia/Shanghai")
+        scheduler.add_job(
+            make_job(s["id"], s["name"], s["chat_id"],
+                     s["msg_type"], s["msg_text"], s["msg_file_id"], s["msg_caption"],
+                     once, s.get("delete_after_seconds")),
+            trigger,
+            id=f"sched_{s['id']}",
+            replace_existing=True,
+        )
+        log.info(f"✅ 定时任务已加载 #{s['id']} [{s['name']}] once={once}")
+    except Exception as e:
+        log.error(f"❌ 定时任务加载失败 #{s['id']} [{s['name']}]: {e}")
+
+
 def reload_schedules():
     scheduler.remove_all_jobs()
+
+    # 每分钟检查：关键词到期 + 定时任务生效时间到达
     scheduler.add_job(
-        check_expired_keywords,
+        check_timers,
         IntervalTrigger(minutes=1),
-        id="__expire_check__",
+        id="__timer_check__",
         replace_existing=True,
     )
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     for s in db.get_schedules():
         if not s["active"]:
             continue
-
-        # 开始生效时间检查：未到开始时间的定时任务跳过加载
+        # Bug 3 修复：start_at 未到时跳过，等定时检查来加载
         start_at = s.get("start_at")
-        if start_at and start_at > now_str:
+        if start_at and str(start_at) > now_str:
             log.info(f"⏳ 定时任务未到生效时间 #{s['id']} [{s['name']}] start_at={start_at}")
             continue
-
-        once = bool(s["once"])
-        cron = s["cron"].strip()
-
-        try:
-            if once:
-                cron_iso = cron.replace(" ", "T")
-                run_dt   = datetime.fromisoformat(cron_iso)
-                trigger  = DateTrigger(run_date=run_dt, timezone="Asia/Shanghai")
-            else:
-                parts = cron.split()
-                if len(parts) != 5:
-                    log.warning(f"⚠️ cron格式错误 #{s['id']}: '{cron}'")
-                    continue
-                mi, hr, dm, mo, dw = parts
-                trigger = CronTrigger(
-                    minute=mi, hour=hr, day=dm, month=mo,
-                    day_of_week=dw, timezone="Asia/Shanghai"
-                )
-
-            scheduler.add_job(
-                make_job(
-                    s["id"], s["name"], s["chat_id"],
-                    s["msg_type"], s["msg_text"], s["msg_file_id"], s["msg_caption"],
-                    once, s.get("delete_after_seconds")
-                ),
-                trigger,
-                id=f"sched_{s['id']}",
-                replace_existing=True,
-            )
-            log.info(f"✅ 定时任务已加载 #{s['id']} [{s['name']}] once={once}")
-        except Exception as e:
-            log.error(f"❌ 定时任务加载失败 #{s['id']} [{s['name']}]: {e}")
+        _load_single_schedule(s)
 
 
-async def check_expired_keywords():
+# ======== Bug 1+3 修复：统一定时检查（关键词到期 + 任务生效） ========
+async def check_timers():
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 1. 关键词到期检查
     expired = db.get_expired_keywords()
     for kw in expired:
         db.deactivate_keyword(kw["id"])
@@ -480,6 +461,18 @@ async def check_expired_keywords():
                 )
             except Exception:
                 pass
+
+    # 2. Bug 3 修复：检查 start_at 已到但还未加载的定时任务
+    for s in db.get_schedules():
+        if not s["active"]:
+            continue
+        start_at = s.get("start_at")
+        if not start_at:
+            continue
+        # start_at 已到 且 scheduler 里还没这个任务
+        if str(start_at) <= now_str and not scheduler.get_job(f"sched_{s['id']}"):
+            log.info(f"🕐 定时任务生效时间已到，加载 #{s['id']} [{s['name']}]")
+            _load_single_schedule(s)
 
 
 async def post_init(application):

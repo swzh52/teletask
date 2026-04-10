@@ -25,9 +25,11 @@ tr:last-child td{border-bottom:none}
 code{font-size:.78rem;background:#f5f5f5;padding:2px 6px;border-radius:4px;word-break:break-all}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem}
 .on{background:#e6f9f0;color:#0f6e56}.off{background:#f5f5f5;color:#888}
+.pending{background:#fff3cd;color:#856404}
 .type-badge{background:#eeedfe;color:#534ab7;display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem}
 .once-badge{background:#fff3cd;color:#856404;display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;margin-left:4px}
 .expire-badge{background:#fde8e8;color:#a32d2d;display:inline-block;padding:2px 6px;border-radius:8px;font-size:.72rem;margin-left:4px}
+.start-badge{background:#e6f1fb;color:#185fa5;display:inline-block;padding:2px 6px;border-radius:8px;font-size:.72rem;margin-left:4px}
 .btn{display:inline-block;padding:4px 10px;border-radius:6px;font-size:.78rem;text-decoration:none;border:none;cursor:pointer;margin-right:3px;white-space:nowrap}
 .btn-del{background:#fde8e8;color:#a32d2d}
 .btn-tog{background:#eeedfe;color:#534ab7}
@@ -75,6 +77,19 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 .modal h3{font-size:1rem;color:#5b4fcf;margin-bottom:16px;padding-right:30px}
 .modal-close{position:absolute;top:14px;right:18px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#aaa}
 .modal-close:hover{color:#333}
+
+/* 批量操作工具栏 */
+.bulk-bar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f0eefb;border-radius:8px;margin-bottom:10px;flex-wrap:wrap}
+.bulk-bar span{font-size:.82rem;color:#5b4fcf;font-weight:500}
+.bulk-btn{padding:5px 14px;border:none;border-radius:6px;font-size:.8rem;cursor:pointer;white-space:nowrap}
+.bulk-enable{background:#e6f9f0;color:#0f6e56}
+.bulk-disable{background:#eeedfe;color:#534ab7}
+.bulk-delete{background:#fde8e8;color:#a32d2d}
+.bulk-count{font-size:.8rem;color:#888;margin-left:auto}
+/* checkbox 列 */
+td.cb-col,th.cb-col{width:32px;padding:8px 4px 8px 10px}
+input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#5b4fcf}
+
 @media(max-width:700px){.g2,.g3,.g4{grid-template-columns:1fr}.reply-item-body{grid-template-columns:1fr}.time-bar{flex-direction:column;align-items:stretch}}
 </style>
 </head>
@@ -101,11 +116,11 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
   <div class="tip-box">
     📎 <b>获取 file_id：</b>管理员私聊 Bot 发送图片/视频/文件，Bot 自动回复 file_id 并记录到<a href="/files" target="_blank" style="color:#5b4fcf">文件库</a>。<br>
     ✏️ <b>文本格式：</b>支持 HTML 格式，使用工具栏插入加粗/斜体/链接等标签，点击👁预览效果。<br>
-    🔂 <b>一次性任务：</b>选择具体时间执行一次后自动停用。
+    🕐 <b>开始生效时间：</b>设置后关键词/任务在该时间前不会触发，到时自动生效。
   </div>
 </div>
 
-<!-- 关键词 -->
+<!-- ==================== 关键词 ==================== -->
 <div class="card">
   <h2>🔑 关键词自动回复</h2>
   <form method="post" action="/kw/add" id="kw-add-form">
@@ -121,29 +136,31 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
           <label><input type="radio" name="mode" value="random" checked> 随机一条</label>
           <label><input type="radio" name="mode" value="all"> 全部发送</label>
         </div>
-        <p class="tip">随机：每次随机发一条 ｜ 全部：依次全发</p>
       </div>
     </div>
-    <div class="g2" style="margin-top:4px">
+    <div class="g3" style="margin-top:4px">
       <div>
         <label>🗑 自动删除回复（0=不删除）</label>
         <div class="duration-group">
-          <input type="number" name="kw_delete_value" min="0" value="0" placeholder="0">
+          <input type="number" name="kw_delete_value" min="0" value="0">
           <select name="kw_delete_unit">
             <option value="1">秒后删除</option><option value="60">分钟后删除</option><option value="3600">小时后删除</option>
           </select>
         </div>
-        <p class="tip">群组/频道中的文本回复默认10秒删除，此处可覆盖</p>
       </div>
       <div>
-        <label>⏱ 关键词自动到期（0=永久有效）</label>
+        <label>⏱ 关键词自动到期（0=永久）</label>
         <div class="duration-group">
-          <input type="number" name="kw_expire_value" min="0" value="0" placeholder="0">
+          <input type="number" name="kw_expire_value" min="0" value="0">
           <select name="kw_expire_unit">
             <option value="60">分钟后到期</option><option value="3600">小时后到期</option><option value="86400">天后到期</option>
           </select>
         </div>
-        <p class="tip">到期后自动停用并通知管理员，统计记录保留</p>
+      </div>
+      <div>
+        <label>🕐 开始生效时间（留空=立即）</label>
+        <input type="datetime-local" name="kw_start_at">
+        <p class="tip">设置后到该时间才开始响应触发</p>
       </div>
     </div>
     <div style="margin-top:16px">
@@ -156,52 +173,74 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 
   {% if keywords %}
   <div class="section-divider">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <span style="font-size:.85rem;color:#888">共 {{ keywords|length }} 条规则</span>
       <input class="search" id="kw-search" placeholder="搜索关键词…" oninput="filterTable('kw-search','kw-table')">
     </div>
-    <table id="kw-table">
-      <tr><th>关键词</th><th>匹配</th><th>模式</th><th>回复数</th><th>首条预览</th><th>状态</th><th>操作</th></tr>
-      {% for kw in keywords %}
-      <tr>
-        <td>
-          <code>{{ kw.pattern }}</code>
-          {% if kw.expire_at %}<span class="expire-badge" title="到期：{{ kw.expire_at }}">⏱到期</span>{% endif %}
-        </td>
-        <td>{{ kw.match }}</td>
-        <td><span class="badge {{ 'on' if kw.mode=='all' else 'off' }}">{{ '全部' if kw.mode=='all' else '随机' }}</span></td>
-        <td style="text-align:center"><b style="color:#5b4fcf">{{ kw.replies|length }}</b>条</td>
-        <td>
-          {% if kw.replies %}{% set r=kw.replies[0] %}
-            <span class="type-badge">{{ r.reply_type }}</span>
-            {% if r.reply_type=='text' %}{{ (r.reply_text or '')[:28] }}{% if (r.reply_text or '')|length>28 %}…{% endif %}
-            {% else %}<code>{{ (r.reply_file_id or '')[:18] }}…</code>{% endif %}
-            {% if kw.replies|length>1 %}<span style="color:#aaa;font-size:.74rem"> +{{ kw.replies|length-1 }}条</span>{% endif %}
-          {% else %}<span style="color:#ccc">无回复</span>{% endif %}
-        </td>
-        <td><span class="badge {{ 'on' if kw.active else 'off' }}">{{ '启用' if kw.active else '停用' }}</span></td>
-        <td>
-          <button class="btn btn-edit" onclick="openKwEdit({{ kw.id }})">编辑</button>
-          <a class="btn btn-tog" href="/kw/toggle/{{ kw.id }}">{{ '停用' if kw.active else '启用' }}</a>
-          <a class="btn btn-del" href="/kw/delete/{{ kw.id }}" onclick="return confirm('确认删除？')">删除</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
+
+    <!-- 批量操作栏 -->
+    <form method="post" action="/kw/bulk" id="kw-bulk-form">
+      <div class="bulk-bar">
+        <span>批量操作：</span>
+        <button type="submit" name="action" value="enable" class="bulk-btn bulk-enable" onclick="return confirmBulk('启用')">✅ 启用</button>
+        <button type="submit" name="action" value="disable" class="bulk-btn bulk-disable" onclick="return confirmBulk('停用')">⏸ 停用</button>
+        <button type="submit" name="action" value="delete" class="bulk-btn bulk-delete" onclick="return confirmBulk('删除')">🗑 删除</button>
+        <span class="bulk-count" id="kw-sel-count">已选 0 条</span>
+      </div>
+      <table id="kw-table">
+        <tr>
+          <th class="cb-col"><input type="checkbox" class="row-cb" onchange="toggleAll(this,'kw-cb','kw-sel-count')"></th>
+          <th>关键词</th><th>匹配</th><th>模式</th><th>回复数</th><th>首条预览</th><th>状态</th><th>操作</th>
+        </tr>
+        {% for kw in keywords %}
+        <tr>
+          <td class="cb-col"><input type="checkbox" class="row-cb kw-cb" name="ids" value="{{ kw.id }}" onchange="updateCount('kw-cb','kw-sel-count')"></td>
+          <td>
+            <code>{{ kw.pattern }}</code>
+            {% if kw.expire_at %}<span class="expire-badge" title="到期：{{ kw.expire_at }}">⏱到期</span>{% endif %}
+            {% if kw.start_at %}<span class="start-badge" title="生效：{{ kw.start_at }}">🕐待生效</span>{% endif %}
+          </td>
+          <td>{{ kw.match }}</td>
+          <td><span class="badge {{ 'on' if kw.mode=='all' else 'off' }}">{{ '全部' if kw.mode=='all' else '随机' }}</span></td>
+          <td style="text-align:center"><b style="color:#5b4fcf">{{ kw.replies|length }}</b>条</td>
+          <td>
+            {% if kw.replies %}{% set r=kw.replies[0] %}
+              <span class="type-badge">{{ r.reply_type }}</span>
+              {% if r.reply_type=='text' %}{{ (r.reply_text or '')[:24] }}{% if (r.reply_text or '')|length>24 %}…{% endif %}
+              {% else %}<code>{{ (r.reply_file_id or '')[:16] }}…</code>{% endif %}
+              {% if kw.replies|length>1 %}<span style="color:#aaa;font-size:.74rem"> +{{ kw.replies|length-1 }}条</span>{% endif %}
+            {% else %}<span style="color:#ccc">无回复</span>{% endif %}
+          </td>
+          <td>
+            {% if kw.start_at and kw.active %}
+              <span class="badge pending">待生效</span>
+            {% else %}
+              <span class="badge {{ 'on' if kw.active else 'off' }}">{{ '启用' if kw.active else '停用' }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-edit" onclick="openKwEdit({{ kw.id }})">编辑</button>
+            <a class="btn btn-tog" href="/kw/toggle/{{ kw.id }}">{{ '停用' if kw.active else '启用' }}</a>
+            <a class="btn btn-del" href="/kw/delete/{{ kw.id }}" onclick="return confirm('确认删除？')">删除</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </form>
   </div>
   {% else %}
   <p class="empty" style="margin-top:20px">暂无关键词规则</p>
   {% endif %}
 </div>
 
-<!-- 定时推送 -->
+<!-- ==================== 定时任务 ==================== -->
 <div class="card">
   <h2>⏰ 定时推送任务</h2>
   <form method="post" action="/sc/add" id="sc-add-form" onsubmit="return beforeScSubmit('add')">
     <div class="g4">
       <div><label>任务名称</label><input name="name" required placeholder="例：早报推送"></div>
       <div><label>Chat ID</label><input name="chat_id" required placeholder="-1001234567890">
-        <p class="tip">群组以 -100 开头，向 @get_id_bot 发消息获取</p>
+        <p class="tip">群组以 -100 开头</p>
       </div>
       <div><label>任务模式</label>
         <div class="mode-radio">
@@ -227,19 +266,17 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
         <div><label style="visibility:hidden">占</label><div class="now-time" id="now-time">--:--:--</div></div>
       </div>
       <div class="cron-examples">
-        <span onclick="setCron('*/1 * * * *')">*/1 * * * * 每分钟</span>
-        <span onclick="setCron('0 * * * *')">0 * * * * 每小时</span>
-        <span onclick="setCron('0 9 * * *')">0 9 * * * 每天9点</span>
-        <span onclick="setCron('0 9 * * 1-5')">0 9 * * 1-5 工作日</span>
-        <span onclick="setCron('0 8,12,20 * * *')">0 8,12,20 * * * 每天3次</span>
-        <span onclick="setCron('0 0 * * 1')">0 0 * * 1 每周一</span>
+        <span onclick="setCron('*/1 * * * *')">*/1 每分钟</span>
+        <span onclick="setCron('0 * * * *')">0 * 每小时</span>
+        <span onclick="setCron('0 9 * * *')">0 9 每天9点</span>
+        <span onclick="setCron('0 9 * * 1-5')">0 9 1-5 工作日</span>
+        <span onclick="setCron('0 8,12,20 * * *')">8/12/20点</span>
+        <span onclick="setCron('0 0 * * 1')">0 0 1 每周一</span>
       </div>
-      <p class="tip" style="margin-top:4px">格式：<b>分</b> <b>时</b> <b>日</b> <b>月</b> <b>周</b> &nbsp;|&nbsp; * 任意 &nbsp; */n 每n &nbsp; a,b 多值 &nbsp; a-b 范围</p>
     </div>
     <div id="add-once-wrap" style="display:none;margin-top:12px">
-      <label>执行时间（精确到分钟）</label>
+      <label>执行时间</label>
       <input type="datetime-local" name="run_at" id="run-at-input">
-      <p class="tip">选择具体时间，触发一次后自动停用</p>
     </div>
     <div id="sc-add-text-row" style="margin-top:4px">
       <label>推送文本</label>
@@ -252,7 +289,7 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
         <button type="button" class="md-btn" onclick="wrapSel('sc-add-msg-text','<code>','</code>')">〈/〉</button>
         <button type="button" class="md-btn" onclick="togglePreview('sc-add-msg-text')">👁</button>
       </div>
-      <textarea name="msg_text" id="sc-add-msg-text" placeholder="支持 HTML：<b>粗体</b> <a href=&quot;URL&quot;>链接</a> 等" oninput="updatePreview('sc-add-msg-text')"></textarea>
+      <textarea name="msg_text" id="sc-add-msg-text" placeholder="支持 HTML：<b>粗体</b> <a href=&quot;URL&quot;>链接</a>" oninput="updatePreview('sc-add-msg-text')"></textarea>
       <div class="md-preview-wrap" id="sc-add-msg-text-preview"></div>
     </div>
     <div id="sc-add-file-row" style="display:none">
@@ -265,16 +302,23 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
         <button type="button" class="md-btn" onclick="insertLink('sc-add-caption')">🔗</button>
         <button type="button" class="md-btn" onclick="togglePreview('sc-add-caption')">👁</button>
       </div>
-      <input name="msg_caption" id="sc-add-caption" placeholder="图片/视频附加说明" oninput="updatePreview('sc-add-caption')">
+      <input name="msg_caption" id="sc-add-caption" oninput="updatePreview('sc-add-caption')">
       <div class="md-preview-wrap" id="sc-add-caption-preview"></div>
     </div>
-    <div style="margin-top:12px">
-      <label>🗑 自动删除推送消息（0=不删除）</label>
-      <div class="duration-group">
-        <input type="number" name="sc_delete_value" min="0" value="0" placeholder="0">
-        <select name="sc_delete_unit">
-          <option value="1">秒后删除</option><option value="60">分钟后删除</option><option value="3600">小时后删除</option>
-        </select>
+    <div class="g2" style="margin-top:12px">
+      <div>
+        <label>🗑 自动删除推送消息（0=不删除）</label>
+        <div class="duration-group">
+          <input type="number" name="sc_delete_value" min="0" value="0">
+          <select name="sc_delete_unit">
+            <option value="1">秒后删除</option><option value="60">分钟后删除</option><option value="3600">小时后删除</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>🕐 开始生效时间（留空=立即）</label>
+        <input type="datetime-local" name="sc_start_at">
+        <p class="tip">到该时间才加载执行，之前不会触发</p>
       </div>
     </div>
     <button class="submit" type="submit">➕ 添加定时任务</button>
@@ -282,31 +326,56 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 
   {% if schedules %}
   <div class="section-divider">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <span style="font-size:.85rem;color:#888">共 {{ schedules|length }} 条任务</span>
       <input class="search" id="sc-search" placeholder="搜索任务名…" oninput="filterTable('sc-search','sc-table')">
     </div>
-    <table id="sc-table">
-      <tr><th>任务名</th><th>Chat ID</th><th>时间/Cron</th><th>类型</th><th>内容预览</th><th>状态</th><th>操作</th></tr>
-      {% for s in schedules %}
-      <tr>
-        <td><b>{{ s.name or '未命名' }}</b>{% if s.once %}<span class="once-badge">一次性</span>{% endif %}</td>
-        <td><code>{{ s.chat_id }}</code></td>
-        <td><code style="font-size:.74rem">{{ s.cron }}</code></td>
-        <td><span class="type-badge">{{ s.msg_type }}</span></td>
-        <td>
-          {% if s.msg_type=='text' %}{{ (s.msg_text or '')[:34] }}{% if (s.msg_text or '')|length>34 %}…{% endif %}
-          {% else %}<code>{{ (s.msg_file_id or '')[:22] }}…</code>{% if s.msg_caption %}<br><span style="color:#888;font-size:.76rem">{{ s.msg_caption }}</span>{% endif %}{% endif %}
-        </td>
-        <td><span class="badge {{ 'on' if s.active else 'off' }}">{{ '启用' if s.active else '停用' }}</span></td>
-        <td>
-          <button class="btn btn-edit" onclick="openScEdit({{ s.id }})">编辑</button>
-          <a class="btn btn-tog" href="/sc/toggle/{{ s.id }}">{{ '停用' if s.active else '启用' }}</a>
-          <a class="btn btn-del" href="/sc/delete/{{ s.id }}" onclick="return confirm('确认删除？')">删除</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
+
+    <!-- 批量操作栏 -->
+    <form method="post" action="/sc/bulk" id="sc-bulk-form">
+      <div class="bulk-bar">
+        <span>批量操作：</span>
+        <button type="submit" name="action" value="enable" class="bulk-btn bulk-enable" onclick="return confirmBulk('启用')">✅ 启用</button>
+        <button type="submit" name="action" value="disable" class="bulk-btn bulk-disable" onclick="return confirmBulk('停用')">⏸ 停用</button>
+        <button type="submit" name="action" value="delete" class="bulk-btn bulk-delete" onclick="return confirmBulk('删除')">🗑 删除</button>
+        <span class="bulk-count" id="sc-sel-count">已选 0 条</span>
+      </div>
+      <table id="sc-table">
+        <tr>
+          <th class="cb-col"><input type="checkbox" class="row-cb" onchange="toggleAll(this,'sc-cb','sc-sel-count')"></th>
+          <th>任务名</th><th>Chat ID</th><th>时间/Cron</th><th>类型</th><th>内容预览</th><th>状态</th><th>操作</th>
+        </tr>
+        {% for s in schedules %}
+        <tr>
+          <td class="cb-col"><input type="checkbox" class="row-cb sc-cb" name="ids" value="{{ s.id }}" onchange="updateCount('sc-cb','sc-sel-count')"></td>
+          <td>
+            <b>{{ s.name or '未命名' }}</b>
+            {% if s.once %}<span class="once-badge">一次性</span>{% endif %}
+            {% if s.start_at %}<span class="start-badge" title="生效：{{ s.start_at }}">🕐待生效</span>{% endif %}
+          </td>
+          <td><code>{{ s.chat_id }}</code></td>
+          <td><code style="font-size:.74rem">{{ s.cron }}</code></td>
+          <td><span class="type-badge">{{ s.msg_type }}</span></td>
+          <td>
+            {% if s.msg_type=='text' %}{{ (s.msg_text or '')[:30] }}{% if (s.msg_text or '')|length>30 %}…{% endif %}
+            {% else %}<code>{{ (s.msg_file_id or '')[:20] }}…</code>{% endif %}
+          </td>
+          <td>
+            {% if s.start_at and s.active %}
+              <span class="badge pending">待生效</span>
+            {% else %}
+              <span class="badge {{ 'on' if s.active else 'off' }}">{{ '启用' if s.active else '停用' }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-edit" onclick="openScEdit({{ s.id }})">编辑</button>
+            <a class="btn btn-tog" href="/sc/toggle/{{ s.id }}">{{ '停用' if s.active else '启用' }}</a>
+            <a class="btn btn-del" href="/sc/delete/{{ s.id }}" onclick="return confirm('确认删除？')">删除</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </form>
   </div>
   {% else %}
   <p class="empty" style="margin-top:20px">暂无定时任务</p>
@@ -318,10 +387,10 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
   <h2>🚫 自动封禁规则</h2>
   <form method="post" action="/ban_rules/add">
     <div class="g3">
-      <div><label>触发次数达到</label><input type="number" name="trigger_count" min="1" value="10" placeholder="10"></div>
+      <div><label>触发次数达到</label><input type="number" name="trigger_count" min="1" value="10"></div>
       <div><label>时间窗口</label>
         <div class="duration-group">
-          <input type="number" name="window_value" min="1" value="5" placeholder="5">
+          <input type="number" name="window_value" min="1" value="5">
           <select name="window_unit">
             <option value="60">分钟内</option><option value="1">秒内</option><option value="3600">小时内</option>
           </select>
@@ -331,7 +400,6 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
         <button class="submit-sm" type="submit" style="width:100%">➕ 添加规则</button>
       </div>
     </div>
-    <p class="tip" style="margin-top:8px">用户在指定时间窗口内触发关键词次数达到阈值时自动封禁，并通知管理员。</p>
   </form>
   {% if ban_rules %}
   <table style="margin-top:16px">
@@ -339,15 +407,13 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
     {% for r in ban_rules %}
     <tr>
       <td>≥ <b>{{ r.trigger_count }}</b> 次</td>
-      <td>
-        {% if r.window_seconds >= 3600 %}{{ r.window_seconds // 3600 }} 小时内
-        {% elif r.window_seconds >= 60 %}{{ r.window_seconds // 60 }} 分钟内
-        {% else %}{{ r.window_seconds }} 秒内{% endif %}
-      </td>
+      <td>{% if r.window_seconds >= 3600 %}{{ r.window_seconds // 3600 }} 小时内
+          {% elif r.window_seconds >= 60 %}{{ r.window_seconds // 60 }} 分钟内
+          {% else %}{{ r.window_seconds }} 秒内{% endif %}</td>
       <td><span class="badge {{ 'on' if r.active else 'off' }}">{{ '启用' if r.active else '停用' }}</span></td>
       <td>
         <a class="btn btn-tog" href="/ban_rules/toggle/{{ r.id }}">{{ '停用' if r.active else '启用' }}</a>
-        <a class="btn btn-del" href="/ban_rules/delete/{{ r.id }}" onclick="return confirm('确认删除该规则？')">删除</a>
+        <a class="btn btn-del" href="/ban_rules/delete/{{ r.id }}" onclick="return confirm('确认删除？')">删除</a>
       </td>
     </tr>
     {% endfor %}
@@ -377,7 +443,7 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
           </div>
         </div>
       </div>
-      <div class="g2" style="margin-top:4px">
+      <div class="g3" style="margin-top:4px">
         <div>
           <label>自动删除回复</label>
           <div class="duration-group">
@@ -395,23 +461,22 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
               <option value="60">分钟</option><option value="3600">小时</option><option value="86400">天</option>
             </select>
           </div>
-          <!-- ✅ 清除到期时间勾选框 -->
           <label style="margin-top:8px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;color:#555;margin-bottom:0">
-            <input type="checkbox" id="e-kw-clear-expire"
-              style="width:auto;padding:0;margin:0"
-              onchange="toggleClearExpire(this)">
+            <input type="checkbox" id="e-kw-clear-expire" style="width:auto;padding:0;margin:0" onchange="toggleClearExpire(this)">
             清除到期时间（改为永久有效）
           </label>
-          <p class="tip" id="e-kw-expire-tip" style="display:none;color:#0f6e56;margin-top:4px">
-            ✅ 保存后该关键词将永久有效
-          </p>
+          <p class="tip" id="e-kw-expire-tip" style="display:none;color:#0f6e56;margin-top:4px">✅ 保存后该关键词将永久有效</p>
+        </div>
+        <div>
+          <label>🕐 开始生效时间（留空=立即）</label>
+          <input type="datetime-local" name="kw_start_at" id="e-kw-start-at">
+          <a href="#" style="font-size:.75rem;color:#a32d2d;display:block;margin-top:4px" onclick="document.getElementById('e-kw-start-at').value='';return false">清除生效时间</a>
         </div>
       </div>
       <div style="margin-top:14px">
         <label>回复内容</label>
         <div id="edit-kw-replies-editor"></div>
-        <button type="button" class="btn-add-item" style="margin-top:8px"
-          onclick="addReplyItem('edit-kw-replies-editor','edit-kw')">＋ 添加一条回复</button>
+        <button type="button" class="btn-add-item" style="margin-top:8px" onclick="addReplyItem('edit-kw-replies-editor','edit-kw')">＋ 添加一条回复</button>
       </div>
       <button class="submit" type="submit">保存修改</button>
     </form>
@@ -480,13 +545,20 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
         <input name="msg_caption" id="e-sc-cap" oninput="updatePreview('e-sc-cap')">
         <div class="md-preview-wrap" id="e-sc-cap-preview"></div>
       </div>
-      <div style="margin-top:12px">
-        <label>自动删除推送消息</label>
-        <div class="duration-group">
-          <input type="number" name="sc_delete_value" id="e-sc-del-val" min="0" value="0">
-          <select name="sc_delete_unit" id="e-sc-del-unit">
-            <option value="1">秒</option><option value="60">分钟</option><option value="3600">小时</option>
-          </select>
+      <div class="g2" style="margin-top:12px">
+        <div>
+          <label>自动删除推送消息</label>
+          <div class="duration-group">
+            <input type="number" name="sc_delete_value" id="e-sc-del-val" min="0" value="0">
+            <select name="sc_delete_unit" id="e-sc-del-unit">
+              <option value="1">秒</option><option value="60">分钟</option><option value="3600">小时</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label>🕐 开始生效时间（留空=立即）</label>
+          <input type="datetime-local" name="sc_start_at" id="e-sc-start-at">
+          <a href="#" style="font-size:.75rem;color:#a32d2d;display:block;margin-top:4px" onclick="document.getElementById('e-sc-start-at').value='';return false">清除生效时间</a>
         </div>
       </div>
       <button class="submit" type="submit">保存修改</button>
@@ -495,6 +567,7 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 </div>
 
 <script>
+// 时钟
 function updateClock(){
   const now=new Date();
   const el=document.getElementById('now-time');
@@ -503,6 +576,7 @@ function updateClock(){
 setInterval(updateClock,1000); updateClock();
 function setCron(v){const el=document.getElementById('cron-input');if(el){el.value=v;el.focus();}}
 
+// 搜索
 function filterTable(inputId,tableId){
   const q=document.getElementById(inputId).value.toLowerCase();
   document.querySelectorAll('#'+tableId+' tr:not(:first-child)').forEach(tr=>{
@@ -510,20 +584,40 @@ function filterTable(inputId,tableId){
   });
 }
 
+// ======== 批量操作 ========
+function toggleAll(masterCb, cbClass, countId){
+  document.querySelectorAll('.'+cbClass).forEach(cb=>{
+    if(cb.closest('tr').style.display!=='none') cb.checked=masterCb.checked;
+  });
+  updateCount(cbClass, countId);
+}
+function updateCount(cbClass, countId){
+  const n=document.querySelectorAll('.'+cbClass+':checked').length;
+  const el=document.getElementById(countId);
+  if(el) el.textContent='已选 '+n+' 条';
+}
+function confirmBulk(action){
+  const formId = action==='删除'?'kw-bulk-form':'kw-bulk-form'; // 由 onclick 上下文决定
+  // 通过 form 内勾选数量判断
+  const checked = document.querySelectorAll('input[type=checkbox].row-cb:checked').length;
+  if(checked===0){alert('请先勾选要操作的条目');return false;}
+  if(action==='删除') return confirm(`确认删除选中的 ${checked} 条？此操作不可撤销。`);
+  return true;
+}
+
+// Markdown 工具栏
 function wrapSel(id,open,close){
   const el=document.getElementById(id); if(!el) return;
-  const start=el.selectionStart, end=el.selectionEnd;
+  const start=el.selectionStart,end=el.selectionEnd;
   const sel=el.value.substring(start,end)||'文字';
   el.value=el.value.substring(0,start)+open+sel+close+el.value.substring(end);
-  el.selectionStart=start+open.length;
-  el.selectionEnd=start+open.length+sel.length;
+  el.selectionStart=start+open.length; el.selectionEnd=start+open.length+sel.length;
   el.focus(); updatePreview(id);
 }
 function insertLink(id){
-  const url=prompt('输入链接地址：','https://');
-  if(!url) return;
+  const url=prompt('输入链接地址：','https://'); if(!url) return;
   const el=document.getElementById(id); if(!el) return;
-  const start=el.selectionStart, end=el.selectionEnd;
+  const start=el.selectionStart,end=el.selectionEnd;
   const sel=el.value.substring(start,end)||'链接文字';
   el.value=el.value.substring(0,start)+`<a href="${url}">${sel}</a>`+el.value.substring(end);
   el.focus(); updatePreview(id);
@@ -539,20 +633,17 @@ function togglePreview(id){
   if(w.style.display==='block') updatePreview(id);
 }
 
+// 定时任务显隐
 function toggleScFields(sel,prefix){
   const t=sel.value,isText=t==='text',isSticker=t==='sticker';
-  _show(prefix+'-text-row',isText);
-  _show(prefix+'-file-row',!isText);
-  _show(prefix+'-caption-row',!isText&&!isSticker);
+  _show(prefix+'-text-row',isText); _show(prefix+'-file-row',!isText); _show(prefix+'-caption-row',!isText&&!isSticker);
 }
 function _show(id,show){const el=document.getElementById(id);if(el)el.style.display=show?'block':'none';}
-
 function toggleOnceMode(radio,mode){
   const isOnce=radio.value==='1';
-  if(mode==='add'){_show('add-cron-wrap',!isOnce);_show('add-once-wrap',isOnce);const ci=document.getElementById('cron-input');if(ci)ci.required=!isOnce;}
-  else{_show('e-cron-wrap',!isOnce);_show('e-once-wrap',isOnce);const ci=document.getElementById('e-sc-cron');if(ci)ci.required=!isOnce;}
+  if(mode==='add'){_show('add-cron-wrap',!isOnce);_show('add-once-wrap',isOnce);}
+  else{_show('e-cron-wrap',!isOnce);_show('e-once-wrap',isOnce);}
 }
-
 function beforeScSubmit(mode){
   const isOnce=mode==='add'
     ?document.querySelector('input[name=once][value="1"]:checked')!==null
@@ -561,20 +652,19 @@ function beforeScSubmit(mode){
     const cronId=mode==='add'?'cron-input':'e-sc-cron';
     const val=(document.getElementById(cronId)?.value||'').trim();
     const parts=val.split(/\s+/);
-    if(parts.length!==5){alert(`❌ Cron 格式错误！\n当前：「${val||'(空)'}」\n需要5个字段（当前${parts.length}个）\n\n示例：0 9 * * * 每天9点`);return false;}
+    if(parts.length!==5){alert(`❌ Cron 格式错误！\n需要5个字段，当前${parts.length}个\n示例：0 9 * * * 每天9点`);return false;}
   }
   return true;
 }
 
+// 回复编辑器
 const REPLY_TYPES=[['text','📝 文本'],['photo','🖼 图片'],['video','🎬 视频'],['audio','🎵 音频'],['document','📄 文件'],['animation','🎞 动图GIF'],['voice','🎤 语音'],['sticker','🎭 贴纸']];
-
 function addReplyItem(editorId,ns,data,idxOverride){
   const ed=document.getElementById(editorId); if(!ed) return;
   const i=idxOverride!==undefined?idxOverride:ed.children.length;
   const typeOpts=REPLY_TYPES.map(([v,l])=>`<option value="${v}" ${(data?.reply_type||'text')===v?'selected':''}>${l}</option>`).join('');
   const isText=(data?.reply_type||'text')==='text',isSticker=data?.reply_type==='sticker';
-  const div=document.createElement('div');
-  div.className='reply-item';
+  const div=document.createElement('div'); div.className='reply-item';
   const tid=`${ns}-rtext-${i}`;
   div.innerHTML=`
     <div class="reply-item-header">
@@ -584,9 +674,7 @@ function addReplyItem(editorId,ns,data,idxOverride){
     <div class="reply-item-body">
       <div>
         <label style="margin-top:0">回复类型</label>
-        <select name="reply_type_${i}" style="margin-top:4px" onchange="toggleReplyFields(this,${i},'${ns}')">
-          ${typeOpts}
-        </select>
+        <select name="reply_type_${i}" style="margin-top:4px" onchange="toggleReplyFields(this,${i},'${ns}')">${typeOpts}</select>
       </div>
       <div id="${ns}-rtext-wrap-${i}" style="display:${isText?'block':'none'}">
         <label style="margin-top:0">回复文本</label>
@@ -597,8 +685,7 @@ function addReplyItem(editorId,ns,data,idxOverride){
           <button type="button" class="md-btn" onclick="insertLink('${tid}')">🔗</button>
           <button type="button" class="md-btn" onclick="togglePreview('${tid}')">👁</button>
         </div>
-        <textarea name="reply_text_${i}" id="${tid}" style="height:60px;margin-top:4px"
-          placeholder="输入回复文字..." oninput="updatePreview('${tid}')">${data?.reply_text||''}</textarea>
+        <textarea name="reply_text_${i}" id="${tid}" style="height:60px;margin-top:4px" placeholder="输入回复文字..." oninput="updatePreview('${tid}')">${data?.reply_text||''}</textarea>
         <div class="md-preview-wrap" id="${tid}-preview"></div>
       </div>
       <div id="${ns}-rfile-wrap-${i}" style="display:${!isText?'block':'none'}">
@@ -612,33 +699,30 @@ function addReplyItem(editorId,ns,data,idxOverride){
     </div>`;
   ed.appendChild(div);
 }
-
 function toggleReplyFields(sel,i,ns){
   const t=sel.value,isText=t==='text',isSticker=t==='sticker';
-  _show(`${ns}-rtext-wrap-${i}`,isText);
-  _show(`${ns}-rfile-wrap-${i}`,!isText);
-  _show(`${ns}-rcap-wrap-${i}`,!isText&&!isSticker);
+  _show(`${ns}-rtext-wrap-${i}`,isText); _show(`${ns}-rfile-wrap-${i}`,!isText); _show(`${ns}-rcap-wrap-${i}`,!isText&&!isSticker);
 }
-
 function renumberReplies(editorId){
   document.querySelectorAll('#'+editorId+' .reply-item-label').forEach((sp,i)=>{sp.textContent=`第 ${i+1} 条回复`;});
 }
 
-// ✅ 清除到期时间
+// 清除到期时间
 function toggleClearExpire(cb){
-  const valEl  = document.getElementById('e-kw-exp-val');
-  const unitEl = document.getElementById('e-kw-exp-unit');
-  const tipEl  = document.getElementById('e-kw-expire-tip');
-  if(cb.checked){
-    valEl.value=-1; valEl.disabled=true; unitEl.disabled=true;
-    if(tipEl) tipEl.style.display='block';
-  } else {
-    valEl.value=0; valEl.disabled=false; unitEl.disabled=false;
-    if(tipEl) tipEl.style.display='none';
-  }
+  const valEl=document.getElementById('e-kw-exp-val');
+  const unitEl=document.getElementById('e-kw-exp-unit');
+  const tipEl=document.getElementById('e-kw-expire-tip');
+  if(cb.checked){valEl.value=-1;valEl.disabled=true;unitEl.disabled=true;if(tipEl)tipEl.style.display='block';}
+  else{valEl.value=0;valEl.disabled=false;unitEl.disabled=false;if(tipEl)tipEl.style.display='none';}
 }
 
-// ✅ 关键词编辑弹窗
+// datetime-local → "YYYY-MM-DD HH:MM" 格式转换（输入控件用 T，展示用空格）
+function toDatetimeLocal(str){
+  if(!str) return '';
+  return str.replace(' ','T').substring(0,16);
+}
+
+// 关键词编辑弹窗
 function openKwEdit(id){
   fetch('/kw/get/'+id).then(r=>r.json()).then(d=>{
     document.getElementById('kw-edit-form').action='/kw/edit/'+id;
@@ -648,15 +732,13 @@ function openKwEdit(id){
     document.getElementById('e-kw-mode-all').checked=d.mode==='all';
     _fillDuration(d.delete_after_seconds,'e-kw-del-val','e-kw-del-unit');
     _fillDuration(d.expire_after_seconds,'e-kw-exp-val','e-kw-exp-unit');
-    // 每次打开弹窗重置清除勾选框
+    // 生效时间
+    const startEl=document.getElementById('e-kw-start-at');
+    if(startEl) startEl.value=toDatetimeLocal(d.start_at||'');
+    // 重置清除勾选框
     const cb=document.getElementById('e-kw-clear-expire');
     const tip=document.getElementById('e-kw-expire-tip');
-    if(cb){
-      cb.checked=false;
-      document.getElementById('e-kw-exp-val').disabled=false;
-      document.getElementById('e-kw-exp-unit').disabled=false;
-      if(tip) tip.style.display='none';
-    }
+    if(cb){cb.checked=false;document.getElementById('e-kw-exp-val').disabled=false;document.getElementById('e-kw-exp-unit').disabled=false;if(tip)tip.style.display='none';}
     const ed=document.getElementById('edit-kw-replies-editor');
     ed.innerHTML='';
     (d.replies||[{reply_type:'text'}]).forEach((r,i)=>addReplyItem('edit-kw-replies-editor','edit-kw',r,i));
@@ -664,6 +746,7 @@ function openKwEdit(id){
   }).catch(()=>alert('获取数据失败'));
 }
 
+// 定时任务编辑弹窗
 function openScEdit(id){
   fetch('/sc/get/'+id).then(r=>r.json()).then(d=>{
     document.getElementById('sc-edit-form').action='/sc/edit/'+id;
@@ -673,24 +756,24 @@ function openScEdit(id){
     document.getElementById('e-sc-once-0').checked=!isOnce;
     document.getElementById('e-sc-once-1').checked=isOnce;
     _show('e-cron-wrap',!isOnce); _show('e-once-wrap',isOnce);
-    if(isOnce){const el=document.getElementById('e-run-at');if(el)el.value=(d.cron||'').replace(' ','T').substring(0,16);}
+    if(isOnce){const el=document.getElementById('e-run-at');if(el)el.value=toDatetimeLocal(d.cron||'');}
     else{const el=document.getElementById('e-sc-cron');if(el){el.value=d.cron||'';el.required=true;}}
     const typeEl=document.getElementById('e-sc-type');
     typeEl.value=d.msg_type||'text'; toggleScFields(typeEl,'sc-edit');
     const textEl=document.getElementById('e-sc-text');
     if(textEl){textEl.value=d.msg_text||''; updatePreview('e-sc-text');}
-    const fidEl=document.getElementById('e-sc-fid');
-    if(fidEl) fidEl.value=d.msg_file_id||'';
-    const capEl=document.getElementById('e-sc-cap');
-    if(capEl){capEl.value=d.msg_caption||''; updatePreview('e-sc-cap');}
+    const fidEl=document.getElementById('e-sc-fid'); if(fidEl) fidEl.value=d.msg_file_id||'';
+    const capEl=document.getElementById('e-sc-cap'); if(capEl){capEl.value=d.msg_caption||''; updatePreview('e-sc-cap');}
     _fillDuration(d.delete_after_seconds,'e-sc-del-val','e-sc-del-unit');
+    // 生效时间
+    const startEl=document.getElementById('e-sc-start-at');
+    if(startEl) startEl.value=toDatetimeLocal(d.start_at||'');
     document.getElementById('sc-modal').classList.add('show');
   }).catch(()=>alert('获取数据失败'));
 }
 
 function _fillDuration(seconds,valId,unitId){
-  const valEl=document.getElementById(valId);
-  const unitEl=document.getElementById(unitId);
+  const valEl=document.getElementById(valId); const unitEl=document.getElementById(unitId);
   if(!valEl||!unitEl) return;
   if(!seconds){valEl.value=0;return;}
   if(seconds>=3600&&seconds%3600===0){unitEl.value=3600;valEl.value=seconds/3600;}

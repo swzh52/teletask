@@ -34,7 +34,6 @@ def is_admin(user_id: int) -> bool:
 
 
 def _clean(s):
-    """统一清理文本：<br> → 换行，字面量 \\n → 换行"""
     if not s:
         return s
     s = s.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
@@ -42,12 +41,22 @@ def _clean(s):
     return s
 
 
+def _is_started(start_at_str):
+    """检查 start_at 时间是否已到，None 表示立即生效"""
+    if not start_at_str:
+        return True
+    try:
+        start_dt = datetime.strptime(start_at_str, "%Y-%m-%d %H:%M:%S")
+        return datetime.now() >= start_dt
+    except Exception:
+        return True
+
+
 # ======== 发送单条消息 ========
 async def send_single(bot, chat_id, msg_type, text=None,
                       file_id=None, caption=None, reply_to=None):
     text    = _clean(text)
     caption = _clean(caption)
-
     kw = {"chat_id": chat_id}
     if reply_to:
         kw["reply_to_message_id"] = reply_to
@@ -88,7 +97,6 @@ async def send_media(bot, chat_id, msg_type, text=None,
     return await send_single(bot, chat_id, msg_type, text, file_id, caption, reply_to)
 
 
-# ======== 检查 file_id 是否被软删除 ========
 async def guarded_send(bot, chat_id, msg_type, text=None,
                        file_id=None, caption=None, reply_to=None):
     if file_id and msg_type != "text":
@@ -132,6 +140,10 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not kw["active"]:
             continue
 
+        # 开始生效时间检查
+        if not _is_started(kw.get("start_at")):
+            continue
+
         pattern, match_type = kw["pattern"], kw["match"]
         hit = False
         if match_type == "exact":
@@ -146,8 +158,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not hit:
             continue
 
-        # Bug 2 修复：continue 而非 return，冷却只跳过当前关键词
-        # Bug 8 修复：key 加入 chat_id，不同群组冷却互不影响
         if not bh.check_kw_cooldown(kw["id"], chat.id):
             log.debug(f"关键词 #{kw['id']} 在 chat {chat.id} 冷却中，跳过")
             continue
@@ -167,7 +177,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             keyword_pattern= kw["pattern"],
         )
 
-        # 自动Ban检查
         if user_id:
             bh.record_trigger(user_id)
             for rule in db.get_auto_ban_rules():
@@ -306,7 +315,6 @@ async def welcome_new_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if result.old_chat_member.status in ("member", "administrator", "creator"):
         return
     new_user  = result.new_chat_member.user
-    # Bug 6 修复：转义用户名防止 HTML 注入
     safe_name = html_module.escape(new_user.first_name or "")
     mention   = f'<a href="tg://user?id={new_user.id}">{safe_name}</a>'
     await ctx.bot.send_message(
@@ -403,7 +411,6 @@ def make_job(sid, name, chat_id, msg_type, msg_text, msg_file_id, msg_caption,
 
 def reload_schedules():
     scheduler.remove_all_jobs()
-
     scheduler.add_job(
         check_expired_keywords,
         IntervalTrigger(minutes=1),
@@ -411,9 +418,16 @@ def reload_schedules():
         replace_existing=True,
     )
 
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     for s in db.get_schedules():
         if not s["active"]:
-            log.info(f"跳过已停用任务 #{s['id']} [{s['name']}]")
+            continue
+
+        # 开始生效时间检查：未到开始时间的定时任务跳过加载
+        start_at = s.get("start_at")
+        if start_at and start_at > now_str:
+            log.info(f"⏳ 定时任务未到生效时间 #{s['id']} [{s['name']}] start_at={start_at}")
             continue
 
         once = bool(s["once"])
@@ -421,15 +435,13 @@ def reload_schedules():
 
         try:
             if once:
-                # Bug 4 修复：兼容空格和 T 分隔的日期时间字符串
                 cron_iso = cron.replace(" ", "T")
                 run_dt   = datetime.fromisoformat(cron_iso)
                 trigger  = DateTrigger(run_date=run_dt, timezone="Asia/Shanghai")
-                log.info(f"一次性任务将在 {run_dt} 执行 #{s['id']} [{s['name']}]")
             else:
                 parts = cron.split()
                 if len(parts) != 5:
-                    log.warning(f"⚠️ cron格式错误 #{s['id']}: '{cron}' 需要5段，当前{len(parts)}段")
+                    log.warning(f"⚠️ cron格式错误 #{s['id']}: '{cron}'")
                     continue
                 mi, hr, dm, mo, dw = parts
                 trigger = CronTrigger(
@@ -452,7 +464,6 @@ def reload_schedules():
             log.error(f"❌ 定时任务加载失败 #{s['id']} [{s['name']}]: {e}")
 
 
-# ======== 关键词到期检查 ========
 async def check_expired_keywords():
     expired = db.get_expired_keywords()
     for kw in expired:
@@ -471,7 +482,6 @@ async def check_expired_keywords():
                 pass
 
 
-# ======== 启动 ========
 async def post_init(application):
     global bot_app
     bot_app = application
@@ -490,7 +500,6 @@ def build_app(token, proxy=None):
     app.add_handler(CommandHandler("start",       cmd_start))
     app.add_handler(CommandHandler("keywords",    cmd_keywords))
     app.add_handler(CommandHandler("task_status", cmd_task_status))
-
     app.add_handler(ChatMemberHandler(welcome_new_member, ChatMemberHandler.CHAT_MEMBER))
 
     app.add_handler(MessageHandler(

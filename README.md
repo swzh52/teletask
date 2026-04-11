@@ -247,36 +247,6 @@ http://你的服务器IP:5000
 
 ---
 
-## 🔧 运维命令
-
-```bash
-# 查看运行状态
-systemctl status teletask
-
-# 重启服务
-systemctl restart teletask
-
-# 查看实时日志
-journalctl -u teletask -f
-
-# 查看最近 100 行日志
-journalctl -u teletask -n 100
-
-# 停止服务
-systemctl stop teletask
-```
-
-### 更新代码
-
-```bash
-cd /opt/teletask
-git pull
-systemctl restart teletask
-```
-
-> 数据库迁移自动执行，无需手动操作。旧数据库升级后新字段自动补全，数据不丢失。
-
----
 
 ## 🛠 技术栈
 

@@ -8,40 +8,55 @@
 
 ### 🔑 关键词自动回复
 - 支持**包含 / 精确 / 正则**三种匹配方式
-- 一个关键词可绑定**多条不同类型的回复**
 - 触发模式：**随机一条** 或 **全部发送**
-- 支持回复类型：文本、图片、视频、音频、文件、动图、语音、贴纸、**相册（最多9个文件）**
+- 支持回复类型：文本、图片、视频、音频、文件、动图、语音、贴纸
 - 监听范围：私聊、群组、频道
+- 群组/频道中的文本回复默认 **10 秒后自动删除**（可自定义）
+- 支持设置**开始生效时间**，到时间前不响应触发
+- 支持设置**自动到期时间**，到期后自动停用并通知管理员
+- 支持**批量启用 / 停用 / 删除**（勾选 + 一键操作）
 
 ### ⏰ 定时推送任务
 - 支持 **Cron 表达式**（周期执行）
 - 支持**一次性定时任务**（指定具体时间，执行后自动停用）
-- 推送内容支持所有媒体类型，包括相册模式
+- 支持设置**开始生效时间**，到时间前不加载执行
+- 支持设置**发送后自动删除**（自定义延迟时长）
 - 任务执行日志记录（完成 / 执行中 / 失败）
+- 支持**批量启用 / 停用 / 删除**（勾选 + 一键操作）
+
+### 🚫 自动封禁规则
+- 可配置触发阈值：用户在指定时间窗口内触发关键词次数超限后**自动封禁**
+- 封禁后立即通过 Bot 通知所有管理员
+- 可在统计页面手动解封
 
 ### 🖥 Web 管理后台
 - 浏览器操作，无需改代码
-- 关键词和定时任务均支持**增删改查**
+- 关键词和定时任务均支持**增删改查 + 批量操作**
 - 弹窗式编辑，操作流畅
-- 实时显示当前时间，内置 Cron 表达式快填示例
+- 内置 **HTML 富文本工具栏**（加粗、斜体、下划线、超链接、代码等），实时预览
+- 实时显示当前时间，内置 Cron 快填示例
 - 概览统计卡片（触发次数、任务完成数等）
 
 ### 📁 文件库
 - 管理员向 Bot 发送媒体文件，自动记录 file_id 及文件信息
 - 记录上传者姓名、用户名、ID
+- 支持**在线编辑文件名**、**软删除**文件
+- 删除前自动检查引用，被删除文件若仍被关键词或任务使用，Bot 跳过发送并告警
 - 支持关键词搜索，点击 file_id 一键复制
-- 独立密码验证访问
 
 ### 📊 统计信息
 - 关键词触发记录：用户、群组、触发时间、关键词
 - 定时任务执行情况：完成 / 执行中 / 失败状态
 - 封禁用户管理：一键 Ban / Unban
-- 数据概览卡片
+- 数据概览卡片（9 项指标）
 
-### 🔐 权限管理
+### 🔐 权限与安全
 - `.env` 配置多个管理员账号（Telegram user_id）
-- 仅管理员可向 Bot 上传文件获取 file_id
-- 普通用户触发关键词无需权限，可被 Ban 屏蔽
+- 仅管理员可上传文件获取 file_id
+- Cookie 使用 **HMAC-SHA256** 签名，防止伪造
+- 所有密码比较使用**常量时间函数**，防止时序攻击
+- 统计页面用户数据全面 **XSS 转义**
+- 正则匹配带**超时保护**，防止 ReDoS 攻击
 
 ### 🤖 Bot 命令（管理员专属）
 | 命令 | 说明 |
@@ -57,13 +72,14 @@
 
 ```
 teletask/
-├── main.py          # 启动入口，同时运行 Bot 和 Web 后台
-├── bot.py           # Bot 核心逻辑（消息处理、定时任务）
-├── app.py           # Flask Web 管理后台
-├── database.py      # SQLite 数据库操作
-├── requirements.txt # Python 依赖
-├── .env             # 环境变量配置（不上传 Git）
-├── tgbot.db         # SQLite 数据库文件（自动生成）
+├── main.py           # 启动入口，同时运行 Bot 和 Web 后台
+├── bot.py            # Bot 核心逻辑（消息处理、定时任务）
+├── bot_helpers.py    # 辅助模块（延迟删除、冷却、触发计数）
+├── app.py            # Flask Web 管理后台
+├── database.py       # SQLite 数据库操作
+├── requirements.txt  # Python 依赖
+├── .env              # 环境变量配置（不上传 Git）
+├── tgbot.db          # SQLite 数据库文件（自动生成）
 └── templates/
     ├── index.html        # 主管理后台
     ├── login.html        # 登录页
@@ -85,7 +101,7 @@ teletask/
 
 ```bash
 cd /opt
-git clone https://github.com/你的用户名/teletask.git
+git clone https://github.com/Swzh53/teletask.git
 cd teletask
 ```
 
@@ -95,6 +111,12 @@ cd teletask
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+可选安装 `regex` 库获得正则 ReDoS 防护：
+
+```bash
+pip install regex
 ```
 
 ### 第三步：配置环境变量
@@ -107,8 +129,12 @@ nano .env
 # Telegram Bot Token（从 @BotFather 获取）
 BOT_TOKEN=123456789:ABCdefGHI...
 
-# Web 管理后台密码
-ADMIN_PASSWORD=your_password
+# Web 管理后台密码（必填，不能为空）
+ADMIN_PASSWORD=your_strong_password
+
+# Session 密钥（必填，用于 Cookie 签名）
+# 生成方法：python -c "import secrets; print(secrets.token_hex(32))"
+SECRET_KEY=your_random_secret_key
 
 # 代理（国内服务器需要，海外服务器留空）
 PROXY=socks5://127.0.0.1:7890
@@ -119,6 +145,13 @@ WEB_PORT=5000
 # 管理员 Telegram user_id（多个用逗号分隔）
 ADMIN_IDS=123456789,987654321
 ```
+
+> ⚠️ `SECRET_KEY` 和 `ADMIN_PASSWORD` 为必填项，任一未设置服务将拒绝启动。
+>
+> 生成 SECRET_KEY：
+> ```bash
+> python -c "import secrets; print(secrets.token_hex(32))"
+> ```
 
 ### 第四步：测试运行
 
@@ -132,36 +165,7 @@ Web 管理后台启动 → http://0.0.0.0:5000
 Bot 启动完成
 ```
 
-### 第五步：配置后台服务
-
-```bash
-sudo nano /etc/systemd/system/teletask.service
-```
-
-```ini
-[Unit]
-Description=Teletask Bot
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/teletask
-ExecStart=/opt/teletask/.venv/bin/python main.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable teletask
-sudo systemctl start teletask
-```
-
-### 第六步：开放端口
+### 第五步：开放端口
 
 ```bash
 sudo ufw allow 22
@@ -184,21 +188,28 @@ http://你的服务器IP:5000
 1. 登录管理后台
 2. 在「关键词自动回复」区域填写关键词和匹配方式
 3. 选择触发模式（随机一条 / 全部发送）
-4. 添加一条或多条回复内容
-5. 点击「添加关键词」
+4. 可选：设置自动删除回复时长、到期时间、开始生效时间
+5. 添加一条或多条回复内容（支持 HTML 富文本格式）
+6. 点击「添加关键词」
 
 ### 添加媒体类型回复
 
 1. 在 Telegram 中私聊你的 Bot，发送图片/视频/文件
-2. Bot 自动回复该文件的 `file_id`
+2. Bot 自动回复该文件的 `file_id` 并记录到文件库
 3. 在管理后台选择对应媒体类型，粘贴 `file_id`
+
+### 批量操作
+
+1. 在关键词或定时任务列表中，勾选需要操作的条目（表头可全选）
+2. 点击批量操作栏中的「✅ 启用」「⏸ 停用」或「🗑 删除」按钮
 
 ### 添加定时任务
 
 1. 填写任务名称和目标 Chat ID
 2. 选择「周期执行」填写 Cron 表达式，或选择「一次性」选择具体时间
-3. 选择消息类型，填写内容
-4. 点击「添加定时任务」
+3. 可选：设置开始生效时间和发送后自动删除时长
+4. 选择消息类型，填写内容
+5. 点击「添加定时任务」
 
 **Cron 表达式速查：**
 
@@ -211,9 +222,28 @@ http://你的服务器IP:5000
 | `0 0 * * 1` | 每周一 0 点 |
 | `0 10 1 * *` | 每月 1 日 10 点 |
 
+### 自动封禁规则
+
+1. 在管理后台「自动封禁规则」区域填写触发次数和时间窗口
+2. 点击「添加规则」
+3. 用户在指定时间内触发次数超限后自动封禁，Bot 通知管理员
+
+### 文字格式说明
+
+回复文本支持 HTML 格式，工具栏可一键插入：
+
+| 效果 | HTML 写法 |
+|------|-----------|
+| **加粗** | `<b>文字</b>` |
+| _斜体_ | `<i>文字</i>` |
+| 下划线 | `<u>文字</u>` |
+| ~~删除线~~ | `<s>文字</s>` |
+| `行内代码` | `<code>文字</code>` |
+| 超链接 | `<a href="URL">文字</a>` |
+
 ### 获取 Chat ID
 
-向 Telegram 的 [@get_id_bot](https://t.me/get_id_bot) 发消息，或将其拉入群组发送 `/id` 获取。
+向 [@get_id_bot](https://t.me/get_id_bot) 发消息，或将其拉入群组发送 `/id` 获取。
 
 ---
 
@@ -244,6 +274,8 @@ git pull
 systemctl restart teletask
 ```
 
+> 数据库迁移自动执行，无需手动操作。旧数据库升级后新字段自动补全，数据不丢失。
+
 ---
 
 ## 🛠 技术栈
@@ -260,9 +292,8 @@ systemctl restart teletask
 
 ## ⚠️ 注意事项
 
-- `.env` 文件包含 Bot Token 等敏感信息，**不要上传到 Git 仓库**
 - `tgbot.db` 是数据库文件，建议定期备份
-- 国内服务器需配置代理才能访问 Telegram API
+- `SECRET_KEY` 和 `ADMIN_PASSWORD` 为必填项，未设置时服务拒绝启动
 - 管理后台默认监听所有 IP，建议配置防火墙或 Nginx 反代 + HTTPS
 
 ---

@@ -573,21 +573,25 @@ def soft_delete_file(fid):
         conn.close()
 
 def get_file_ids_in_use(file_id):
+    """查找引用该 file_id 的所有规则（包括已停用的，否则用户删除文件后
+    重新启用规则会静默失败）"""
     conn = get_conn()
     try:
         usages = []
         kw_rows = conn.execute(
-            "SELECT k.id, k.pattern FROM keyword_replies kr "
+            "SELECT k.id, k.pattern, k.active FROM keyword_replies kr "
             "JOIN keywords k ON kr.keyword_id=k.id "
-            "WHERE kr.reply_file_id=? AND k.active=1", (file_id,)
+            "WHERE kr.reply_file_id=?", (file_id,)
         ).fetchall()
         for r in kw_rows:
-            usages.append({"type": "keyword", "id": r["id"], "name": r["pattern"]})
+            usages.append({"type": "keyword", "id": r["id"],
+                           "name": r["pattern"], "active": r["active"]})
         sc_rows = conn.execute(
-            "SELECT id, name FROM schedules WHERE msg_file_id=? AND active=1", (file_id,)
+            "SELECT id, name, active FROM schedules WHERE msg_file_id=?", (file_id,)
         ).fetchall()
         for r in sc_rows:
-            usages.append({"type": "schedule", "id": r["id"], "name": r["name"]})
+            usages.append({"type": "schedule", "id": r["id"],
+                           "name": r["name"], "active": r["active"]})
         return usages
     finally:
         conn.close()

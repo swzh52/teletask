@@ -87,6 +87,19 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:
 .bulk-count{font-size:.8rem;color:#888;margin-left:auto}
 td.cb-col,th.cb-col{width:32px;padding:8px 4px 8px 10px}
 input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#5b4fcf;padding:0}
+/* 群组多选选择器 */
+.chat-picker{display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1px solid #eee;border-radius:8px;background:#fafafa;max-height:180px;overflow-y:auto;margin-top:4px}
+.chat-chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #ddd;border-radius:20px;padding:4px 12px;cursor:pointer;font-size:.82rem;font-weight:normal;color:#333;margin:0}
+.chat-chip input[type=checkbox]{width:14px;height:14px;padding:0;margin:0;accent-color:#5b4fcf}
+.chat-chip code{font-size:.72rem;background:transparent;color:#999;padding:0}
+.chat-chip:has(input:checked){background:#eeedfe;border-color:#5b4fcf;color:#5b4fcf}
+.chat-chip:has(input:checked) code{color:#8679e0}
+.chat-manage-bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.chat-manage-bar input{flex:1;min-width:120px;padding:7px 10px}
+.chat-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chat-row{background:#f8f7fd;border:1px solid #e4e1f5;border-radius:8px;padding:6px 10px;font-size:.82rem;display:flex;align-items:center;gap:8px}
+.chat-row code{font-size:.72rem;background:transparent;padding:0;color:#888}
+.chat-row .btn{padding:2px 8px;font-size:.72rem}
 @media(max-width:700px){.g2,.g3,.g4{grid-template-columns:1fr}.reply-item-body{grid-template-columns:1fr}.time-bar{flex-direction:column;align-items:stretch}}
 </style>
 </head>
@@ -97,6 +110,7 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
   <div class="nav-btns">
     <a class="nav-link" href="/stats" target="_blank">📊 统计信息</a>
     <a class="nav-link" href="/files" target="_blank">📁 文件库</a>
+    <a class="nav-link" href="/import" target="_blank">📥 批量导入</a>
   </div>
 </div>
 
@@ -160,6 +174,22 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
         <input type="datetime-local" name="kw_start_at">
       </div>
     </div>
+
+    <!-- 群组多选（新功能） -->
+    <label style="margin-top:16px">🎯 监控群组（不选 = 所有群组）</label>
+    <div class="chat-picker" id="add-kw-chats">
+      {% if chats %}
+        {% for c in chats %}
+        <label class="chat-chip">
+          <input type="checkbox" name="chat_ids" value="{{ c.chat_id }}">
+          <span>{{ c.title or c.chat_id }}</span>
+          <code>{{ c.chat_id }}</code>
+        </label>
+        {% endfor %}
+      {% else %}
+        <p class="tip" style="margin:4px 0">暂无已记录的群组。Bot 收到群组消息后会自动出现，或在下方「群组管理」手动添加。</p>
+      {% endif %}
+    </div>
     <div style="margin-top:16px">
       <label>回复内容（可添加多条）</label>
       <div id="add-kw-replies-editor"></div>
@@ -194,6 +224,11 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
           <code>{{ kw.pattern }}</code>
           {% if kw.expire_at %}<span class="expire-badge" title="到期：{{ kw.expire_at }}">⏱到期</span>{% endif %}
           {% if kw.start_at %}<span class="start-badge" title="生效：{{ kw.start_at }}">🕐待生效</span>{% endif %}
+          {% if kw.chat_ids %}
+            <br><span style="font-size:.72rem;color:#888">🎯 {{ kw.chat_ids|length }} 个群组</span>
+          {% else %}
+            <br><span style="font-size:.72rem;color:#bbb">🌐 所有群组</span>
+          {% endif %}
         </td>
         <td>{{ kw.match }}</td>
         <td><span class="badge {{ 'on' if kw.mode=='all' else 'off' }}">{{ '全部' if kw.mode=='all' else '随机' }}</span></td>
@@ -383,6 +418,33 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
   {% endif %}
 </div>
 
+<!-- ==================== 群组管理 ==================== -->
+<div class="card">
+  <h2>🎯 群组管理</h2>
+  <p class="tip" style="margin-bottom:8px">Bot 收到群组消息会自动记录到这里；也可手动添加。用于关键词功能的"监控群组"多选。</p>
+  <form method="post" action="/chats/add">
+    <div class="chat-manage-bar">
+      <input name="chat_id" required placeholder="群组 Chat ID，如 -1001234567890">
+      <input name="title" placeholder="群组名称（可选）">
+      <button class="submit-sm" type="submit">➕ 添加群组</button>
+    </div>
+  </form>
+  {% if chats %}
+  <div class="chat-list">
+    {% for c in chats %}
+    <div class="chat-row">
+      <b>{{ c.title or c.chat_id }}</b>
+      <code>{{ c.chat_id }}</code>
+      {% if c.chat_type %}<span class="badge off" style="font-size:.7rem">{{ c.chat_type }}</span>{% endif %}
+      <a class="btn btn-del" href="/chats/delete/{{ c.chat_id }}" onclick="return confirm('删除群组记录？关键词中的关联也会移除')">删除</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty" style="margin-top:10px">暂无群组记录</p>
+  {% endif %}
+</div>
+
 <!-- 关键词编辑弹窗 -->
 <div class="modal-overlay" id="kw-modal">
   <div class="modal">
@@ -432,6 +494,22 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
           <input type="datetime-local" name="kw_start_at" id="e-kw-start-at">
           <a href="#" style="font-size:.75rem;color:#a32d2d;display:block;margin-top:4px" onclick="document.getElementById('e-kw-start-at').value='';return false">清除生效时间</a>
         </div>
+      </div>
+
+      <!-- 编辑弹窗：群组多选 -->
+      <label style="margin-top:14px">🎯 监控群组（不选 = 所有群组）</label>
+      <div class="chat-picker" id="edit-kw-chats">
+        {% if chats %}
+          {% for c in chats %}
+          <label class="chat-chip">
+            <input type="checkbox" name="chat_ids" value="{{ c.chat_id }}" data-cid="{{ c.chat_id }}">
+            <span>{{ c.title or c.chat_id }}</span>
+            <code>{{ c.chat_id }}</code>
+          </label>
+          {% endfor %}
+        {% else %}
+          <p class="tip" style="margin:4px 0">暂无已记录的群组。</p>
+        {% endif %}
       </div>
       <div style="margin-top:14px">
         <label>回复内容</label>
@@ -763,6 +841,11 @@ function openKwEdit(id){
     const ed=document.getElementById('edit-kw-replies-editor');
     ed.innerHTML='';
     (d.replies||[{reply_type:'text'}]).forEach((r,i)=>addReplyItem('edit-kw-replies-editor','edit-kw',r,i));
+    // 勾选已关联群组
+    const related=new Set((d.chat_ids||[]).map(Number));
+    document.querySelectorAll('#edit-kw-chats input[name=chat_ids]').forEach(cb=>{
+      cb.checked=related.has(parseInt(cb.value,10));
+    });
     document.getElementById('kw-modal').classList.add('show');
   }).catch(e=>{console.error(e);alert('获取数据失败，请检查网络');});
 }

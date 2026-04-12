@@ -64,6 +64,7 @@ def index():
         schedules = db.get_schedules(),
         stats     = db.get_stats(),
         ban_rules = db.get_auto_ban_rules(),
+        chats     = db.get_chats(),
     )
 
 
@@ -77,8 +78,10 @@ def kw_add():
     das     = _parse_seconds(request.form, "kw_delete")
     eas     = _parse_seconds(request.form, "kw_expire")
     start_at = _parse_datetime_local(request.form.get("kw_start_at", ""))
+    chat_ids = _parse_chat_ids_form(request.form)
     if pattern and replies:
-        db.add_keyword(pattern, match, mode, replies, das, eas, start_at=start_at)
+        db.add_keyword(pattern, match, mode, replies, das, eas,
+                       start_at=start_at, chat_ids=chat_ids)
     return redirect("/")
 
 
@@ -91,8 +94,10 @@ def kw_edit(kid):
     das     = _parse_seconds(request.form, "kw_delete")
     eas     = _parse_seconds(request.form, "kw_expire")
     start_at = _parse_datetime_local(request.form.get("kw_start_at", ""))
+    chat_ids = _parse_chat_ids_form(request.form)
     if pattern:
-        db.update_keyword(kid, pattern, match, mode, replies, das, eas, start_at=start_at)
+        db.update_keyword(kid, pattern, match, mode, replies, das, eas,
+                          start_at=start_at, chat_ids=chat_ids)
     return redirect("/")
 
 
@@ -159,6 +164,17 @@ def _parse_datetime_local(s):
     if len(s) == 16:      # 没有秒数
         s += ":00"
     return s
+
+
+def _parse_chat_ids_form(f):
+    """从表单中提取 chat_ids（多选复选框）。返回 int 列表，空列表表示"所有群组"。"""
+    ids = []
+    for v in f.getlist("chat_ids"):
+        try:
+            ids.append(int(v))
+        except (ValueError, TypeError):
+            pass
+    return ids
 
 
 # ======== 定时任务 CRUD ========
@@ -391,6 +407,103 @@ def sc_bulk():
         db.bulk_toggle_schedules(ids, 0)
     _reload()
     return redirect("/")
+
+
+# ======== 群组管理 ========
+@flask_app.route("/chats/add", methods=["POST"])
+def chats_add():
+    cid   = request.form.get("chat_id", "").strip()
+    title = request.form.get("title", "").strip()
+    if not cid:
+        return redirect("/")
+    try:
+        db.add_chat_manual(int(cid), title or str(cid))
+    except (ValueError, TypeError):
+        pass
+    return redirect("/")
+
+
+@flask_app.route("/chats/rename/<int:cid>", methods=["POST"])
+def chats_rename(cid):
+    title = request.form.get("title", "").strip()
+    if title:
+        db.update_chat_title(cid, title)
+    return redirect("/")
+
+
+@flask_app.route("/chats/delete/<int:cid>")
+def chats_delete(cid):
+    db.delete_chat(cid)
+    return redirect("/")
+
+
+# ======== 批量导入 ========
+@flask_app.route("/import")
+def import_page():
+    return render_template("import.html", msg=request.args.get("msg"))
+
+
+@flask_app.route("/import/kw", methods=["POST"])
+def import_kw():
+    import bulk_import
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return redirect("/import?msg=" + _url_msg("未选择文件"))
+    try:
+        ok, fail, errors = bulk_import.import_keywords(f.filename, f.read())
+    except Exception as e:
+        return redirect("/import?msg=" + _url_msg(f"导入失败：{e}"))
+    summary = f"关键词导入完成：成功 {ok} 条，失败 {fail} 条"
+    if errors:
+        summary += "\n\n错误详情：\n" + "\n".join(errors[:20])
+        if len(errors) > 20:
+            summary += f"\n...（共 {len(errors)} 条错误，仅显示前 20 条）"
+    return render_template("import.html", msg=summary)
+
+
+@flask_app.route("/import/sc", methods=["POST"])
+def import_sc():
+    import bulk_import
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return redirect("/import?msg=" + _url_msg("未选择文件"))
+    try:
+        ok, fail, errors = bulk_import.import_schedules(f.filename, f.read())
+    except Exception as e:
+        return redirect("/import?msg=" + _url_msg(f"导入失败：{e}"))
+    _reload()
+    summary = f"定时任务导入完成：成功 {ok} 条，失败 {fail} 条"
+    if errors:
+        summary += "\n\n错误详情：\n" + "\n".join(errors[:20])
+        if len(errors) > 20:
+            summary += f"\n...（共 {len(errors)} 条错误，仅显示前 20 条）"
+    return render_template("import.html", msg=summary)
+
+
+@flask_app.route("/import/template/<kind>")
+def import_template(kind):
+    """下载模板。kind 形如 kw_csv / kw_json / sc_csv / sc_json"""
+    import bulk_import
+    from flask import Response
+    mapping = {
+        "kw_csv":  (bulk_import.build_keyword_template_csv,  "keywords_template.csv",  "text/csv; charset=utf-8"),
+        "kw_json": (bulk_import.build_keyword_template_json, "keywords_template.json", "application/json; charset=utf-8"),
+        "sc_csv":  (bulk_import.build_schedule_template_csv, "schedules_template.csv", "text/csv; charset=utf-8"),
+        "sc_json": (bulk_import.build_schedule_template_json,"schedules_template.json","application/json; charset=utf-8"),
+    }
+    if kind not in mapping:
+        return "unknown template", 404
+    builder, fname, mime = mapping[kind]
+    return Response(
+        builder(),
+        mimetype=mime,
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+def _url_msg(s):
+    from urllib.parse import quote
+    return quote(s)
 
 
 @flask_app.route("/debug/routes")

@@ -341,7 +341,7 @@ def import_schedules(filename, content_bytes):
                                    "delete_after_value", "delete_after_unit")
             active = _safe_int(r.get("active"), 1)
 
-            db.add_schedule(
+            sid = db.add_schedule(
                 name=name,
                 chat_id=chat_id,
                 cron=cron,
@@ -353,13 +353,9 @@ def import_schedules(filename, content_bytes):
                 delete_after_seconds=das,
                 start_at=None,
             )
-            # active=0 需立刻停用刚新增的条目
-            if active == 0:
-                all_sc = db.get_schedules()
-                if all_sc:
-                    newest = max(all_sc, key=lambda s: s["id"])
-                    if newest["name"] == name and str(newest["chat_id"]) == chat_id:
-                        db.toggle_schedule(newest["id"])
+            # active=0 需立刻停用刚新增的条目，直接用返回的 ID
+            if active == 0 and sid:
+                db.toggle_schedule(sid)
             ok += 1
         except Exception as e:
             fail += 1

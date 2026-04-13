@@ -308,10 +308,35 @@ def update_keyword(kid, pattern, match, mode, replies,
                          expire_after_seconds, expire_at, start_at, kid)
                     )
                 else:
-                    conn.execute(
-                        "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,start_at=? WHERE id=?",
-                        (pattern, match, mode, delete_after_seconds, start_at, kid)
-                    )
+                    # Bug 修复：expire_after_seconds=None 表示"不改动失效时长"，
+                    # 但 start_at 可能被修改了。若原记录有 expire_after_seconds，
+                    # 需要基于新 start_at 重算 expire_at，否则会出现
+                    # "新 start_at 尚未到 / 已过 expire_at" 的错配。
+                    row = conn.execute(
+                        "SELECT expire_after_seconds FROM keywords WHERE id=?", (kid,)
+                    ).fetchone()
+                    prev_eas = row["expire_after_seconds"] if row else None
+                    if prev_eas:
+                        base = datetime.now()
+                        if start_at:
+                            try:
+                                start_dt = datetime.strptime(str(start_at), "%Y-%m-%d %H:%M:%S")
+                                if start_dt > base:
+                                    base = start_dt
+                            except Exception:
+                                pass
+                        expire_at = (base + timedelta(seconds=prev_eas)
+                                     ).strftime("%Y-%m-%d %H:%M:%S")
+                        conn.execute(
+                            "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,"
+                            "expire_at=?,start_at=? WHERE id=?",
+                            (pattern, match, mode, delete_after_seconds, expire_at, start_at, kid)
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,start_at=? WHERE id=?",
+                            (pattern, match, mode, delete_after_seconds, start_at, kid)
+                        )
                 conn.execute("DELETE FROM keyword_replies WHERE keyword_id=?", (kid,))
                 for i, r in enumerate(replies):
                     conn.execute(

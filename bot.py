@@ -1,4 +1,4 @@
-import re, logging, os, asyncio, html as html_module
+import re, logging, os, asyncio, html as html_module, zoneinfo
 from datetime import datetime
 from telegram import Update
 from telegram.ext import (
@@ -12,6 +12,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 import database as db
 import bot_helpers as bh
 import random
+
+_TZ_SHANGHAI = zoneinfo.ZoneInfo("Asia/Shanghai")
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +135,7 @@ async def guarded_send(bot, chat_id, msg_type, text=None,
                        file_id=None, caption=None, reply_to=None):
     if file_id and msg_type != "text":
         if not db.is_file_id_active(file_id):
-            log.warning(f"⚠️ file_id 已删除，跳过发送: {file_id[:30]}...")
+            log.warning(f"⚠️ file_id 已删除，跳过发送: {file_id[:50]}...")
             for admin_id in ADMIN_IDS:
                 try:
                     await bot.send_message(
@@ -257,10 +259,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             if sent is None:
                 return
-            if is_group and r["reply_type"] == "text":
-                delay = delete_after if delete_after else 10
-                asyncio.create_task(bh.delete_later(ctx.bot, chat.id, sent.message_id, delay))
-            elif delete_after:
+            if delete_after:
                 asyncio.create_task(bh.delete_later(ctx.bot, chat.id, sent.message_id, delete_after))
 
         if mode == "all":
@@ -343,7 +342,9 @@ async def welcome_new_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     if result.old_chat_member.status in ("member", "administrator", "creator"):
         return
-    new_user  = result.new_chat_member.user
+    new_user = result.new_chat_member.user
+    if new_user.is_bot:
+        return
     safe_name = html_module.escape(new_user.first_name or "")
     mention   = f'<a href="tg://user?id={new_user.id}">{safe_name}</a>'
     await ctx.bot.send_message(chat_id=result.chat.id,
@@ -439,7 +440,9 @@ def _load_single_schedule(s: dict):
             cron_iso = cron.replace(" ", "T")
             run_dt   = datetime.fromisoformat(cron_iso)
             # 过滤已过期的一次性任务：直接停用并跳过加载，避免 APScheduler 报错或立即触发
-            if run_dt <= datetime.now():
+            # 使用上海时区的当前时间与 run_dt 比较，保证与 DateTrigger(timezone=Asia/Shanghai) 一致
+            now_sh = datetime.now(_TZ_SHANGHAI).replace(tzinfo=None)
+            if run_dt <= now_sh:
                 log.warning(f"⚠️ 一次性任务 #{s['id']} [{s['name']}] 执行时间 {cron} 已过去，自动停用")
                 try:
                     db.toggle_schedule(s["id"])

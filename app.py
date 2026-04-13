@@ -35,8 +35,9 @@ def check_auth():
 
 @flask_app.before_request
 def require_login():
-    open_paths = ("/login", "/do_login", "/do_files_login", "/do_stats_login")
-    if any(request.path.startswith(p) for p in open_paths):
+    open_paths = {"/login", "/do_login", "/do_files_login", "/do_stats_login",
+                  "/stats", "/stats/logout", "/files", "/files/logout", "/import"}
+    if request.path in open_paths:
         return
     if not check_auth():
         return redirect("/login")

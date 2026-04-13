@@ -62,6 +62,15 @@ input.search{padding:7px 12px;border:1px solid #ddd;border-radius:6px;
   text-decoration:none;border:none;cursor:pointer}
 .btn-cancel-m{background:#eee;color:#555}
 .btn-confirm-del{background:#a32d2d;color:#fff}
+
+/* 批量操作栏 */
+.bulk-bar{display:flex;gap:10px;align-items:center;padding:10px 14px;
+  background:#f0eefb;border-radius:8px;margin-bottom:14px;flex-wrap:wrap}
+.bulk-bar .count{font-size:.82rem;color:#534ab7;font-weight:500}
+.btn-bulk-del{background:#a32d2d;color:#fff;padding:6px 14px;border:none;
+  border-radius:6px;cursor:pointer;font-size:.82rem}
+.btn-bulk-del:disabled{background:#ddd;color:#999;cursor:not-allowed}
+th.chk-col,td.chk-col{width:34px;text-align:center}
 </style>
 <script>
 function copyFid(el){
@@ -75,8 +84,14 @@ function copyFid(el){
 function filterTable(){
   const q=document.getElementById('search').value.toLowerCase();
   document.querySelectorAll('#file-table tbody tr').forEach(tr=>{
-    tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none';
+    const show = tr.innerText.toLowerCase().includes(q);
+    tr.style.display = show ? '' : 'none';
+    if(!show){
+      const chk = tr.querySelector('.row-chk');
+      if(chk) chk.checked = false;
+    }
   });
+  if(typeof updateBulkBar==='function') updateBulkBar();
 }
 
 function showNameEdit(id){
@@ -119,6 +134,85 @@ function checkAndDelete(fid){
 function closeModal(){
   document.getElementById('delete-modal').classList.remove('show');
 }
+
+/* ===== 批量操作 ===== */
+function getCheckedIds(){
+  return Array.from(document.querySelectorAll('.row-chk:checked')).map(c=>c.value);
+}
+function updateBulkBar(){
+  const ids = getCheckedIds();
+  document.getElementById('bulk-count').innerText = ids.length;
+  document.getElementById('btn-bulk-del').disabled = ids.length === 0;
+  // 同步全选框状态
+  const all = document.querySelectorAll('.row-chk');
+  const chk = document.getElementById('chk-all');
+  if(all.length > 0){
+    chk.checked = ids.length === all.length;
+    chk.indeterminate = ids.length > 0 && ids.length < all.length;
+  }
+}
+function toggleAll(src){
+  document.querySelectorAll('.row-chk').forEach(c=>{
+    if(c.closest('tr').style.display !== 'none') c.checked = src.checked;
+  });
+  updateBulkBar();
+}
+function bulkDelete(){
+  const ids = getCheckedIds();
+  if(ids.length === 0) return;
+
+  // 先批量查询引用情况
+  const fd = new FormData();
+  ids.forEach(id => fd.append('ids', id));
+  fetch('/files/bulk_check_usages', {method:'POST', body:fd})
+    .then(r=>r.json())
+    .then(data=>{
+      const items = data.items || [];
+      if(items.length > 0){
+        // 有引用，弹窗警告
+        const lines = [];
+        items.forEach(it=>{
+          lines.push(`▸ [${it.file_name||'(未命名)'}]`);
+          it.usages.forEach(u=>{
+            lines.push(`   • [${u.type==='keyword'?'关键词':'定时任务'}] ${u.name}`);
+          });
+        });
+        document.getElementById('bulk-modal-usages').innerText = lines.join('\n');
+        document.getElementById('bulk-modal-count').innerText = ids.length;
+        // 把 ids 写入表单
+        const form = document.getElementById('bulk-delete-form');
+        form.querySelectorAll('input[name=ids]').forEach(el=>el.remove());
+        ids.forEach(id=>{
+          const i = document.createElement('input');
+          i.type='hidden'; i.name='ids'; i.value=id;
+          form.appendChild(i);
+        });
+        document.getElementById('bulk-delete-modal').classList.add('show');
+      } else {
+        // 无引用，直接确认
+        if(confirm(`确认删除选中的 ${ids.length} 个文件？此操作不可恢复。`)){
+          submitBulkDelete(ids);
+        }
+      }
+    })
+    .catch(()=>{
+      if(confirm(`确认删除选中的 ${ids.length} 个文件？`)) submitBulkDelete(ids);
+    });
+}
+function submitBulkDelete(ids){
+  const form = document.createElement('form');
+  form.method='post'; form.action='/files/bulk_delete';
+  ids.forEach(id=>{
+    const i = document.createElement('input');
+    i.type='hidden'; i.name='ids'; i.value=id;
+    form.appendChild(i);
+  });
+  document.body.appendChild(form);
+  form.submit();
+}
+function closeBulkModal(){
+  document.getElementById('bulk-delete-modal').classList.remove('show');
+}
 </script>
 </head>
 <body>
@@ -138,9 +232,16 @@ function closeModal(){
   </div>
 
   {% if records %}
+  <div class="bulk-bar">
+    <span class="count">已选择 <span id="bulk-count">0</span> 项</span>
+    <button id="btn-bulk-del" class="btn-bulk-del" onclick="bulkDelete()" disabled>🗑 批量删除</button>
+    <span style="font-size:.78rem;color:#888">※ 被关键词或定时任务引用的文件删除前会提示确认</span>
+  </div>
+
   <table id="file-table">
     <thead>
       <tr>
+        <th class="chk-col"><input type="checkbox" id="chk-all" onchange="toggleAll(this)"></th>
         <th>#</th><th>类型</th><th>文件名（点击编辑）</th>
         <th>尺寸/时长</th><th>大小</th><th>上传者</th>
         <th>file_id（点击复制）</th><th>时间</th><th>操作</th>
@@ -149,6 +250,7 @@ function closeModal(){
     <tbody>
     {% for r in records %}
     <tr>
+      <td class="chk-col"><input type="checkbox" class="row-chk" value="{{ r.id }}" onchange="updateBulkBar()"></td>
       <td>{{ r.id }}</td>
       <td><span class="badge">{{ r.file_type }}</span></td>
 
@@ -218,6 +320,22 @@ function closeModal(){
     <div class="modal-btns">
       <button class="btn-cancel-m" onclick="closeModal()">取消</button>
       <a class="btn-confirm-del" id="modal-confirm-btn" href="#">确认删除</a>
+    </div>
+  </div>
+</div>
+
+<!-- 批量删除确认弹窗（有引用时） -->
+<div class="modal-overlay" id="bulk-delete-modal">
+  <div class="modal">
+    <h3>⚠️ 有 <span id="bulk-modal-count">0</span> 个待删文件正在被使用</h3>
+    <p>以下文件被关键词/定时任务引用。删除后相关规则将无法正常发送，Bot 会通知管理员。</p>
+    <div class="usage-list" id="bulk-modal-usages" style="white-space:pre-wrap;max-height:240px;overflow:auto"></div>
+    <p style="color:#a32d2d;font-size:.82rem">确认后会删除所有选中文件（包括无引用的）。</p>
+    <div class="modal-btns">
+      <button class="btn-cancel-m" onclick="closeBulkModal()">取消</button>
+      <form id="bulk-delete-form" method="post" action="/files/bulk_delete" style="display:inline">
+        <button class="btn-confirm-del" type="submit">确认全部删除</button>
+      </form>
     </div>
   </div>
 </div>

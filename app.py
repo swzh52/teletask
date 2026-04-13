@@ -366,6 +366,51 @@ def files_check_usages(fid):
     return jsonify({"usages": usages, "file_name": target["file_name"] or ""})
 
 
+@flask_app.route("/files/bulk_check_usages", methods=["POST"])
+def files_bulk_check_usages():
+    """批量检查多个文件是否有引用。"""
+    if not session.get("files_auth"):
+        return jsonify({"error": "unauthorized"}), 403
+    ids = []
+    for v in request.form.getlist("ids"):
+        try:
+            ids.append(int(v))
+        except (ValueError, TypeError):
+            pass
+    if not ids:
+        return jsonify({"items": []})
+    records = db.get_file_records()
+    by_id   = {r["id"]: r for r in records}
+    items   = []
+    for fid in ids:
+        tgt = by_id.get(fid)
+        if not tgt:
+            continue
+        usages = db.get_file_ids_in_use(tgt["file_id"])
+        if usages:
+            items.append({
+                "id": fid,
+                "file_name": tgt["file_name"] or "",
+                "usages": usages,
+            })
+    return jsonify({"items": items})
+
+
+@flask_app.route("/files/bulk_delete", methods=["POST"])
+def files_bulk_delete():
+    if not session.get("files_auth"):
+        return redirect("/files")
+    ids = []
+    for v in request.form.getlist("ids"):
+        try:
+            ids.append(int(v))
+        except (ValueError, TypeError):
+            pass
+    if ids:
+        db.bulk_soft_delete_files(ids)
+    return redirect("/files")
+
+
 # ======== 批量操作 ========
 def _bulk_ids():
     """从表单取出 ids 列表（int），忽略非法值"""
@@ -423,17 +468,28 @@ def chats_add():
     return redirect("/")
 
 
-@flask_app.route("/chats/rename/<int:cid>", methods=["POST"])
+# 注意：Telegram 群组/频道 chat_id 为负数（如 -1001234567890），
+# Flask 默认的 <int:...> 转换器不匹配负数，会导致 404。
+# 因此这里用 <cid> 字符串转换器，再手动 int()。
+@flask_app.route("/chats/rename/<cid>", methods=["POST"])
 def chats_rename(cid):
+    try:
+        cid_int = int(cid)
+    except (ValueError, TypeError):
+        return redirect("/")
     title = request.form.get("title", "").strip()
     if title:
-        db.update_chat_title(cid, title)
+        db.update_chat_title(cid_int, title)
     return redirect("/")
 
 
-@flask_app.route("/chats/delete/<int:cid>")
+@flask_app.route("/chats/delete/<cid>")
 def chats_delete(cid):
-    db.delete_chat(cid)
+    try:
+        cid_int = int(cid)
+    except (ValueError, TypeError):
+        return redirect("/")
+    db.delete_chat(cid_int)
     return redirect("/")
 
 

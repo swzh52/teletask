@@ -607,6 +607,28 @@ def soft_delete_file(fid):
     finally:
         conn.close()
 
+def bulk_soft_delete_files(fids):
+    """批量软删除文件。返回被删除的 file_id 列表（供调用方检查引用并告警）。"""
+    if not fids:
+        return []
+    conn = get_conn()
+    try:
+        placeholders = ",".join("?" * len(fids))
+        rows = conn.execute(
+            f"SELECT file_id FROM file_records WHERE id IN ({placeholders}) AND deleted=0",
+            tuple(fids)
+        ).fetchall()
+        deleted_file_ids = [r["file_id"] for r in rows]
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            f"UPDATE file_records SET deleted=1,deleted_at=? WHERE id IN ({placeholders})",
+            (now, *fids)
+        )
+        conn.commit()
+        return deleted_file_ids
+    finally:
+        conn.close()
+
 def get_file_ids_in_use(file_id):
     """查找引用该 file_id 的所有规则（包括已停用的，否则用户删除文件后
     重新启用规则会静默失败）"""

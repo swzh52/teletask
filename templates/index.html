@@ -476,13 +476,14 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
           </div>
         </div>
         <div>
-          <label>关键词到期（从现在起）</label>
+          <label>关键词到期（从现在起，留0=不修改）</label>
           <div class="duration-group">
             <input type="number" name="kw_expire_value" id="e-kw-exp-val" min="0" value="0">
             <select name="kw_expire_unit" id="e-kw-exp-unit">
               <option value="60">分钟</option><option value="3600">小时</option><option value="86400">天</option>
             </select>
           </div>
+          <p class="tip" id="e-kw-expire-current" style="display:none;color:#185fa5;margin-top:4px"></p>
           <label style="margin-top:8px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;color:#555;margin-bottom:0">
             <input type="checkbox" id="e-kw-clear-expire" style="width:auto;padding:0;margin:0" onchange="toggleClearExpire(this)">
             清除到期时间（永久有效）
@@ -832,12 +833,15 @@ function openKwEdit(id){
     document.getElementById('e-kw-mode-rnd').checked=d.mode!=='all';
     document.getElementById('e-kw-mode-all').checked=d.mode==='all';
     _fillDuration(d.delete_after_seconds,'e-kw-del-val','e-kw-del-unit');
-    _fillDuration(d.expire_after_seconds,'e-kw-exp-val','e-kw-exp-unit');
+    // 不预填 expire_after_seconds：编辑时保持 0 表示"不修改失效时间"，避免重置 expire_at
+    document.getElementById('e-kw-exp-val').value=0;
     const startEl=document.getElementById('e-kw-start-at');
     if(startEl) startEl.value=toDatetimeLocal(d.start_at||'');
     const cb=document.getElementById('e-kw-clear-expire');
     const tip=document.getElementById('e-kw-expire-tip');
+    const cur=document.getElementById('e-kw-expire-current');
     if(cb){cb.checked=false;document.getElementById('e-kw-exp-val').disabled=false;document.getElementById('e-kw-exp-unit').disabled=false;if(tip)tip.style.display='none';}
+    if(cur){if(d.expire_at){cur.textContent='⏱ 当前到期时间：'+d.expire_at+'（填0=保持不变）';cur.style.display='block';}else{cur.style.display='none';}}
     const ed=document.getElementById('edit-kw-replies-editor');
     ed.innerHTML='';
     (d.replies||[{reply_type:'text'}]).forEach((r,i)=>addReplyItem('edit-kw-replies-editor','edit-kw',r,i));

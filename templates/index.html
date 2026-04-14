@@ -138,6 +138,9 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
 <!-- ==================== 关键词 ==================== -->
 <div class="card">
   <h2>🔑 关键词自动回复</h2>
+  {% if request.args.get('kw_err') %}
+  <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:.65rem 1rem;margin-bottom:10px;color:#856404">❌ {{ request.args.get('kw_err') }}</div>
+  {% endif %}
   <form method="post" action="/kw/add" id="kw-add-form">
     <div class="g4">
       <div><label>关键词 / 正则</label><input name="pattern" required placeholder="例：价格"></div>
@@ -257,10 +260,13 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
   {% else %}
   <p class="empty" style="margin-top:20px">暂无关键词规则</p>
   {% endif %}
+</div>
 
-  
 <div class="card">
   <h2>⏰ 定时推送任务</h2>
+  {% if request.args.get('sc_err') %}
+  <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:.65rem 1rem;margin-bottom:10px;color:#856404">❌ {{ request.args.get('sc_err') }}</div>
+  {% endif %}
   <form method="post" action="/sc/add" id="sc-add-form" onsubmit="return beforeScSubmit('add')">
     <div class="g4">
       <div><label>任务名称</label><input name="name" required placeholder="例：早报推送"></div>
@@ -429,6 +435,92 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
   {% else %}
   <p class="empty" style="margin-top:16px">暂无自动Ban规则</p>
   {% endif %}
+
+  <!-- ===== 群组内关键词屏蔽规则 ===== -->
+  <div class="section-divider">
+    <h2 style="margin-bottom:14px">🔇 群组内关键词屏蔽规则</h2>
+    <p class="tip" style="margin-bottom:12px">单个用户在指定群组触发关键词回复达到 X 次后，屏蔽其关键词触发；当天设定时刻自动解除屏蔽。</p>
+    {% if chats %}
+    <form method="post" action="/group_mute_rules/add">
+      <div class="g3">
+        <div>
+          <label>目标群组</label>
+          <select name="chat_id" required>
+            {% for c in chats %}
+            <option value="{{ c.chat_id }}">{{ c.title or c.chat_id }}（{{ c.chat_id }}）</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>触发次数达到</label>
+          <input type="number" name="trigger_count" min="1" value="5">
+        </div>
+        <div>
+          <label>当天解除屏蔽时刻</label>
+          <input type="time" name="unmute_time" value="23:59" required>
+          <p class="tip">到达该时刻自动解除屏蔽</p>
+        </div>
+      </div>
+      <button class="submit-sm" type="submit" style="margin-top:12px">➕ 添加群组屏蔽规则</button>
+    </form>
+    {% else %}
+    <p class="tip" style="margin-bottom:12px">⚠️ 请先在「群组管理」中添加群组，才能设置群组屏蔽规则。</p>
+    {% endif %}
+
+    {% if group_mute_rules %}
+    <table style="margin-top:16px">
+      <tr><th>群组</th><th>触发次数</th><th>解除时刻</th><th>状态</th><th>操作</th></tr>
+      {% for r in group_mute_rules %}
+      {% set chat_info = chats | selectattr('chat_id', 'equalto', r.chat_id) | list %}
+      <tr>
+        <td>
+          {% if chat_info %}
+            <b>{{ chat_info[0].title or r.chat_id }}</b><br>
+          {% endif %}
+          <code style="color:#aaa">{{ r.chat_id }}</code>
+        </td>
+        <td>≥ <b>{{ r.trigger_count }}</b> 次</td>
+        <td>{{ '%02d:%02d' | format(r.unmute_hour, r.unmute_minute) }}</td>
+        <td><span class="badge {{ 'on' if r.active else 'off' }}">{{ '启用' if r.active else '停用' }}</span></td>
+        <td>
+          <a class="btn btn-tog" href="/group_mute_rules/toggle/{{ r.id }}">{{ '停用' if r.active else '启用' }}</a>
+          <a class="btn btn-del" href="/group_mute_rules/delete/{{ r.id }}" onclick="return confirm('确认删除该规则？')">删除</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="empty" style="margin-top:16px">暂无群组屏蔽规则</p>
+    {% endif %}
+
+    {% if group_muted_users %}
+    <div style="margin-top:20px">
+      <p style="font-size:.85rem;color:#555;font-weight:500;margin-bottom:8px">🔇 当前被屏蔽用户（共 {{ group_muted_users|length }} 人）</p>
+      <table>
+        <tr><th>用户ID</th><th>群组</th><th>屏蔽时间</th><th>解除时间</th><th>操作</th></tr>
+        {% for mu in group_muted_users %}
+        {% set chat_info = chats | selectattr('chat_id', 'equalto', mu.chat_id) | list %}
+        <tr>
+          <td><code>{{ mu.user_id }}</code></td>
+          <td>
+            {% if chat_info %}<b>{{ chat_info[0].title or mu.chat_id }}</b><br>{% endif %}
+            <code style="color:#aaa">{{ mu.chat_id }}</code>
+          </td>
+          <td style="white-space:nowrap;color:#888">{{ mu.muted_at }}</td>
+          <td style="white-space:nowrap;color:#856404">{{ mu.unmute_at }}</td>
+          <td>
+            <form method="post" action="/group_mute_rules/unmute" style="display:inline">
+              <input type="hidden" name="user_id" value="{{ mu.user_id }}">
+              <input type="hidden" name="chat_id" value="{{ mu.chat_id }}">
+              <button class="btn btn-edit" type="submit" onclick="return confirm('立即解除该用户的屏蔽？')">解除</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+  </div>
 </div>
 
 <!-- ==================== 群组管理 ==================== -->
@@ -501,6 +593,8 @@ input[type=checkbox].row-cb{width:16px;height:16px;cursor:pointer;accent-color:#
             <input type="checkbox" id="e-kw-clear-expire" style="width:auto;padding:0;margin:0" onchange="toggleClearExpire(this)">
             清除到期时间（永久有效）
           </label>
+          <!-- Bug1修复：用 hidden input 传 -1，避免 disabled 字段不提交的问题 -->
+          <input type="hidden" name="kw_expire_clear" id="e-kw-clear-expire-hidden" value="0">
           <p class="tip" id="e-kw-expire-tip" style="display:none;color:#0f6e56;margin-top:4px">✅ 保存后该关键词将永久有效</p>
         </div>
         <div>
@@ -723,9 +817,15 @@ function toggleOnceMode(radio,mode){
 }
 function beforeScSubmit(mode){
   const isOnce=mode==='add'
-    ?document.querySelector('input[name=once][value="1"]:checked')!==null
+    // BugC修复：作用域限定到新增表单，避免编辑弹窗中的单选框污染判断
+    ?document.getElementById('sc-add-form')?.querySelector('input[name=once][value="1"]:checked')!==null
     :document.getElementById('e-sc-once-1')?.checked;
-  if(!isOnce){
+  if(isOnce){
+    // Bug3修复：一次性任务必须填写执行时间
+    const runAtId=mode==='add'?'run-at-input':'e-run-at';
+    const val=(document.getElementById(runAtId)?.value||'').trim();
+    if(!val){alert('❌ 一次性任务必须填写执行时间！');return false;}
+  } else {
     const cronId=mode==='add'?'cron-input':'e-sc-cron';
     const val=(document.getElementById(cronId)?.value||'').trim();
     if(val.split(/\s+/).length!==5){alert('❌ Cron 格式错误！需要5个字段\n示例：0 9 * * * 每天9点');return false;}
@@ -828,8 +928,17 @@ function toggleClearExpire(cb){
   const v=document.getElementById('e-kw-exp-val');
   const u=document.getElementById('e-kw-exp-unit');
   const t=document.getElementById('e-kw-expire-tip');
-  if(cb.checked){v.value=-1;v.disabled=true;u.disabled=true;if(t)t.style.display='block';}
-  else{v.value=0;v.disabled=false;u.disabled=false;if(t)t.style.display='none';}
+  const hidden=document.getElementById('e-kw-clear-expire-hidden');
+  if(cb.checked){
+    // Bug1修复：不用 disabled（disabled 字段不提交），改用隐藏 input 传 -1 信号
+    v.value=0; v.disabled=true; u.disabled=true;
+    if(hidden) hidden.value='-1';
+    if(t) t.style.display='block';
+  } else {
+    v.value=0; v.disabled=false; u.disabled=false;
+    if(hidden) hidden.value='0';
+    if(t) t.style.display='none';
+  }
 }
 
 function toDatetimeLocal(str){
@@ -853,7 +962,9 @@ function openKwEdit(id){
     const cb=document.getElementById('e-kw-clear-expire');
     const tip=document.getElementById('e-kw-expire-tip');
     const cur=document.getElementById('e-kw-expire-current');
+    const hidden=document.getElementById('e-kw-clear-expire-hidden');
     if(cb){cb.checked=false;document.getElementById('e-kw-exp-val').disabled=false;document.getElementById('e-kw-exp-unit').disabled=false;if(tip)tip.style.display='none';}
+    if(hidden) hidden.value='0'; // Bug1修复：打开弹窗时重置隐藏传值
     if(cur){if(d.expire_at){cur.textContent='⏱ 当前到期时间：'+d.expire_at+'（填0=保持不变）';cur.style.display='block';}else{cur.style.display='none';}}
     const ed=document.getElementById('edit-kw-replies-editor');
     ed.innerHTML='';
@@ -933,4 +1044,3 @@ document.addEventListener('DOMContentLoaded',()=>{
 </script>
 </body>
 </html>
-

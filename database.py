@@ -153,6 +153,12 @@ def init_db():
         );
     """)
         _migrate(conn)
+        # Bug9修复：进程启动时把所有残留的 running 状态补标为 error（进程崩溃补偿）
+        conn.execute(
+            "UPDATE schedule_logs SET status='error', error='进程意外退出' "
+            "WHERE status='running'"
+        )
+        conn.commit()
     conn.close()
 
 def _migrate(conn):
@@ -348,35 +354,13 @@ def update_keyword(kid, pattern, match, mode, replies,
                          expire_after_seconds, expire_at, start_at, kid)
                     )
                 else:
-                    # Bug 修复：expire_after_seconds=None 表示"不改动失效时长"，
-                    # 但 start_at 可能被修改了。若原记录有 expire_after_seconds，
-                    # 需要基于新 start_at 重算 expire_at，否则会出现
-                    # "新 start_at 尚未到 / 已过 expire_at" 的错配。
-                    row = conn.execute(
-                        "SELECT expire_after_seconds FROM keywords WHERE id=?", (kid,)
-                    ).fetchone()
-                    prev_eas = row["expire_after_seconds"] if row else None
-                    if prev_eas:
-                        base = datetime.now()
-                        if start_at:
-                            try:
-                                start_dt = datetime.strptime(str(start_at), "%Y-%m-%d %H:%M:%S")
-                                if start_dt > base:
-                                    base = start_dt
-                            except Exception:
-                                pass
-                        expire_at = (base + timedelta(seconds=prev_eas)
-                                     ).strftime("%Y-%m-%d %H:%M:%S")
-                        conn.execute(
-                            "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,"
-                            "expire_at=?,start_at=? WHERE id=?",
-                            (pattern, match, mode, delete_after_seconds, expire_at, start_at, kid)
-                        )
-                    else:
-                        conn.execute(
-                            "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,start_at=? WHERE id=?",
-                            (pattern, match, mode, delete_after_seconds, start_at, kid)
-                        )
+                    # Bug2修复：expire_after_seconds=None 表示"不改动到期时间"，
+                    # 只更新其余字段，expire_at/expire_after_seconds 原样保留在数据库。
+                    # 旧代码会按新 start_at 重算，导致每次编辑都意外延长关键词寿命。
+                    conn.execute(
+                        "UPDATE keywords SET pattern=?,match=?,mode=?,delete_after_seconds=?,start_at=? WHERE id=?",
+                        (pattern, match, mode, delete_after_seconds, start_at, kid)
+                    )
                 conn.execute("DELETE FROM keyword_replies WHERE keyword_id=?", (kid,))
                 for i, r in enumerate(replies):
                     conn.execute(
@@ -405,6 +389,7 @@ def delete_keyword(kid):
     try:
         with _write_lock:
             conn.execute("DELETE FROM keyword_replies WHERE keyword_id=?", (kid,))
+            conn.execute("DELETE FROM keyword_chats WHERE keyword_id=?", (kid,))   # Bug10修复
             conn.execute("DELETE FROM keywords WHERE id=?", (kid,))
             conn.commit()
     finally:
@@ -460,6 +445,7 @@ def bulk_delete_keywords(ids: list):
         with _write_lock:
             ph = ",".join("?" * len(ids))
             conn.execute(f"DELETE FROM keyword_replies WHERE keyword_id IN ({ph})", list(ids))
+            conn.execute(f"DELETE FROM keyword_chats WHERE keyword_id IN ({ph})", list(ids))  # Bug10修复
             conn.execute(f"DELETE FROM keywords WHERE id IN ({ph})", list(ids))
             conn.commit()
     finally:
@@ -874,6 +860,8 @@ def delete_chat(chat_id):
         with _write_lock:
             conn.execute("DELETE FROM chats WHERE chat_id=?", (chat_id,))
             conn.execute("DELETE FROM keyword_chats WHERE chat_id=?", (chat_id,))
+            conn.execute("DELETE FROM group_mute_rules WHERE chat_id=?", (chat_id,))    # Bug11修复
+            conn.execute("DELETE FROM group_muted_users WHERE chat_id=?", (chat_id,))  # Bug11修复
             conn.commit()
     finally:
         conn.close()

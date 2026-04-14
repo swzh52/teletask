@@ -74,3 +74,31 @@ def get_trigger_count(user_id: int, window_seconds: int) -> int:
     now    = time.monotonic()
     cutoff = now - window_seconds
     return sum(1 for t in _user_trigger_history.get(user_id, []) if t > cutoff)
+
+
+# ======== 群组内用户触发计数（群组屏蔽规则用） ========
+# key: (user_id, chat_id) → list[monotonic timestamp]
+_group_trigger_history: dict[tuple, list] = defaultdict(list)
+_GROUP_HISTORY_WINDOW = 86400  # 保留最近24小时记录
+
+def record_group_trigger(user_id: int, chat_id: int):
+    """记录用户在某群组触发一次关键词"""
+    now    = time.monotonic()
+    cutoff = now - _GROUP_HISTORY_WINDOW
+    key = (user_id, chat_id)
+    _group_trigger_history[key].append(now)
+    _group_trigger_history[key] = [t for t in _group_trigger_history[key] if t > cutoff]
+    if not _group_trigger_history[key]:
+        del _group_trigger_history[key]
+
+def get_group_trigger_count(user_id: int, chat_id: int) -> int:
+    """返回用户在该群组当天触发的次数（以单调时钟计，最近24h内）"""
+    now    = time.monotonic()
+    cutoff = now - _GROUP_HISTORY_WINDOW
+    key = (user_id, chat_id)
+    return sum(1 for t in _group_trigger_history.get(key, []) if t > cutoff)
+
+def reset_group_trigger(user_id: int, chat_id: int):
+    """解除屏蔽时清零该用户在该群的计数"""
+    key = (user_id, chat_id)
+    _group_trigger_history.pop(key, None)

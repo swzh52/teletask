@@ -122,6 +122,32 @@ async def send_single(bot, chat_id, msg_type, text=None,
         else:
             return await bot.send_message(text=f"[不支持的类型:{t}]", **kw)
     except Exception as e:
+        # Bug12修复：HTML parse_mode 下 Telegram 返回 BadRequest 时，
+        # 降级为纯文本重试，防止因 HTML 格式错误导致消息永久无法发送。
+        from telegram.error import BadRequest
+        if isinstance(e, BadRequest) and "can't parse" in str(e).lower():
+            log.warning(f"send_single HTML解析失败，降级为纯文本重试 type={t}: {e}")
+            try:
+                if t == "text":
+                    # BugB修复：text 类型同样需要剥离 HTML 标签再重试，否则裸标签原样发送
+                    plain_text = html_module.unescape(re.sub(r"<[^>]+>", "", text or ""))
+                    return await bot.send_message(text=plain_text or "", **kw)
+                elif t in ("photo","video","audio","document","animation","voice"):
+                    # caption 去掉 parse_mode 重试
+                    send_fn = {
+                        "photo": bot.send_photo, "video": bot.send_video,
+                        "audio": bot.send_audio, "document": bot.send_document,
+                        "animation": bot.send_animation, "voice": bot.send_voice,
+                    }[t]
+                    arg_key = {
+                        "photo":"photo","video":"video","audio":"audio",
+                        "document":"document","animation":"animation","voice":"voice",
+                    }[t]
+                    plain_cap = html_module.unescape(re.sub(r"<[^>]+>", "", caption or ""))
+                    return await send_fn(**{arg_key: file_id}, caption=plain_cap or None, **kw)
+            except Exception as e2:
+                log.error(f"send_single 降级重试也失败 type={t}: {e2}")
+                raise e2
         log.error(f"send_single 失败 type={t}: {e}")
         raise
 
@@ -147,7 +173,8 @@ async def guarded_send(bot, chat_id, msg_type, text=None,
                     )
                 except Exception:
                     pass
-            return None
+            # Bug7修复：抛出异常让 make_job 的 except 能捕获，记录为 error 而非 success
+            raise RuntimeError(f"file_id 已删除，消息未发送: {file_id[:50]}")
     return await send_media(bot, chat_id, msg_type, text, file_id, caption, reply_to)
 
 
@@ -203,6 +230,13 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not hit:
             continue
 
+        # ★ 修复：群组屏蔽检查提前到冷却/发送之前，避免被屏蔽的用户仍触发回复
+        if user_id and is_group:
+            muted_until = db.is_muted_in_group(user_id, chat.id)
+            if muted_until:
+                log.debug(f"用户 {user_id} 在群 {chat.id} 被屏蔽至 {muted_until}，跳过关键词 #{kw['id']}")
+                continue  # 跳过本条关键词，继续检查下一条
+
         if not bh.check_kw_cooldown(kw["id"], chat.id):
             log.debug(f"关键词 #{kw['id']} 在 chat {chat.id} 冷却中，跳过")
             continue
@@ -224,6 +258,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         if user_id:
             bh.record_trigger(user_id)
+            # === 全局自动封禁规则 ===
             for rule in db.get_auto_ban_rules():
                 if not rule["active"]:
                     continue
@@ -245,19 +280,67 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                             pass
                     return
 
+            # === 群组内关键词屏蔽规则 ===
+            if is_group:
+                # 记录该群内触发次数，并检查群组屏蔽规则
+                bh.record_group_trigger(user_id, chat.id)
+                group_count = bh.get_group_trigger_count(user_id, chat.id)
+                log.debug(f"群组触发计数 user={user_id} chat={chat.id} count={group_count}")
+                for rule in db.get_group_mute_rules():
+                    if not rule["active"]:
+                        continue
+                    # ★ 修复：加日志便于排查 chat_id 不匹配问题
+                    rule_chat_id = int(rule["chat_id"])
+                    if rule_chat_id != chat.id:
+                        log.debug(f"群组屏蔽规则 #{rule['id']} chat_id={rule_chat_id} 与当前 chat.id={chat.id} 不匹配，跳过")
+                        continue
+                    if group_count >= rule["trigger_count"]:
+                        # 计算当天解除屏蔽时间
+                        from datetime import timedelta
+                        now_dt    = datetime.now()
+                        unmute_dt = now_dt.replace(
+                            hour=rule["unmute_hour"],
+                            minute=rule["unmute_minute"],
+                            second=0, microsecond=0
+                        )
+                        # 若解除时间已过（当天），则顺延到明天
+                        if unmute_dt <= now_dt:
+                            unmute_dt = unmute_dt + timedelta(days=1)
+                        unmute_str = unmute_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        db.mute_user_in_group(user_id, chat.id, rule["id"], unmute_str)
+                        log.info(f"🔇 用户 {user_id} 在群 {chat.id} 触发 {group_count} 次，屏蔽至 {unmute_str}")
+                        for admin_id in ADMIN_IDS:
+                            try:
+                                await ctx.bot.send_message(
+                                    chat_id=admin_id,
+                                    text=(f"🔇 <b>群组关键词屏蔽通知</b>\n\n"
+                                          f"用户：{html_module.escape(user.first_name or '')} "
+                                          f"(<code>{user_id}</code>)\n"
+                                          f"群组：{html_module.escape(chat.title or str(chat.id))}"
+                                          f" (<code>{chat.id}</code>)\n"
+                                          f"原因：触发关键词 {group_count} 次\n"
+                                          f"解除时间：{unmute_str}"),
+                                    parse_mode="HTML"
+                                )
+                            except Exception:
+                                pass
+                        return
+
         mode         = kw.get("mode", "random")
         delete_after = kw.get("delete_after_seconds")
 
         async def do_send(r):
-            sent = await guarded_send(
-                ctx.bot, chat.id,
-                r["reply_type"],
-                r.get("reply_text"),
-                r.get("reply_file_id"),
-                r.get("reply_caption"),
-                reply_to=msg.message_id,
-            )
-            if sent is None:
+            try:
+                sent = await guarded_send(
+                    ctx.bot, chat.id,
+                    r["reply_type"],
+                    r.get("reply_text"),
+                    r.get("reply_file_id"),
+                    r.get("reply_caption"),
+                    reply_to=msg.message_id,
+                )
+            except RuntimeError:
+                # file_id 失效，guarded_send 已通知管理员，静默跳过
                 return
             if delete_after:
                 asyncio.create_task(bh.delete_later(ctx.bot, chat.id, sent.message_id, delete_after))
@@ -496,6 +579,12 @@ async def check_timers():
             except Exception:
                 pass
 
+    # 群组屏蔽到期解除检查
+    for mute in db.get_expired_group_mutes():
+        db.unmute_user_in_group(mute["user_id"], mute["chat_id"])
+        bh.reset_group_trigger(mute["user_id"], mute["chat_id"])
+        log.info(f"🔊 群组屏蔽已解除 user={mute['user_id']} chat={mute['chat_id']}")
+
 
 async def post_init(application):
     global bot_app
@@ -531,4 +620,3 @@ def build_app(token, proxy=None):
     ))
 
     return app
-

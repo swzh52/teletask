@@ -61,11 +61,13 @@ def do_login():
 def index():
     return render_template(
         "index.html",
-        keywords  = db.get_keywords(),
-        schedules = db.get_schedules(),
-        stats     = db.get_stats(),
-        ban_rules = db.get_auto_ban_rules(),
-        chats     = db.get_chats(),
+        keywords       = db.get_keywords(),
+        schedules      = db.get_schedules(),
+        stats          = db.get_stats(),
+        ban_rules      = db.get_auto_ban_rules(),
+        chats          = db.get_chats(),
+        group_mute_rules = db.get_group_mute_rules(),
+        group_muted_users = db.get_group_muted_users(),
     )
 
 
@@ -312,6 +314,50 @@ def ban_rules_delete(rid):
 @flask_app.route("/ban_rules/toggle/<int:rid>")
 def ban_rules_toggle(rid):
     db.toggle_auto_ban_rule(rid)
+    return redirect("/")
+
+
+# ======== 群组内关键词屏蔽规则 ========
+@flask_app.route("/group_mute_rules/add", methods=["POST"])
+def group_mute_rules_add():
+    try:
+        chat_id       = int(request.form.get("chat_id", 0) or 0)
+        trigger_count = int(request.form.get("trigger_count", 5) or 5)
+        unmute_time   = request.form.get("unmute_time", "23:59").strip()
+        h, m = (unmute_time.split(":") + ["0"])[:2]
+        unmute_hour   = max(0, min(23, int(h)))
+        unmute_minute = max(0, min(59, int(m)))
+        if chat_id:
+            db.add_group_mute_rule(chat_id, trigger_count, unmute_hour, unmute_minute)
+    except (ValueError, TypeError):
+        pass
+    return redirect("/")
+
+
+@flask_app.route("/group_mute_rules/delete/<int:rid>")
+def group_mute_rules_delete(rid):
+    db.delete_group_mute_rule(rid)
+    return redirect("/")
+
+
+@flask_app.route("/group_mute_rules/toggle/<int:rid>")
+def group_mute_rules_toggle(rid):
+    db.toggle_group_mute_rule(rid)
+    return redirect("/")
+
+
+@flask_app.route("/group_mute_rules/unmute", methods=["POST"])
+def group_mute_rules_unmute():
+    """手动提前解除某用户在某群的屏蔽"""
+    try:
+        user_id = int(request.form.get("user_id", 0) or 0)
+        chat_id = int(request.form.get("chat_id", 0) or 0)
+        if user_id and chat_id:
+            db.unmute_user_in_group(user_id, chat_id)
+            import bot_helpers as bh
+            bh.reset_group_trigger(user_id, chat_id)
+    except (ValueError, TypeError):
+        pass
     return redirect("/")
 
 

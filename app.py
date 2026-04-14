@@ -82,6 +82,14 @@ def kw_add():
     eas     = _parse_seconds(request.form, "kw_expire")
     start_at = _parse_datetime_local(request.form.get("kw_start_at", ""))
     chat_ids = _parse_chat_ids_form(request.form)
+    # Bug4修复：正则模式下校验表达式合法性
+    if pattern and match == "regex":
+        import re
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            from urllib.parse import quote
+            return redirect(f"/?kw_err={quote(f'正则表达式非法：{e}')}")
     if pattern and replies:
         db.add_keyword(pattern, match, mode, replies, das, eas,
                        start_at=start_at, chat_ids=chat_ids)
@@ -95,9 +103,23 @@ def kw_edit(kid):
     mode    = request.form.get("mode", "random")
     replies = _parse_replies(request.form)
     das     = _parse_seconds(request.form, "kw_delete")
-    eas     = _parse_seconds(request.form, "kw_expire")
+    # Bug1修复：优先读 kw_expire_clear（hidden input，-1 表示清除）；
+    # 普通到期字段被 disabled 后不提交，hidden 字段作为信号源。
+    clear_flag = request.form.get("kw_expire_clear", "0").strip()
+    if clear_flag == "-1":
+        eas = -1
+    else:
+        eas = _parse_seconds(request.form, "kw_expire")
     start_at = _parse_datetime_local(request.form.get("kw_start_at", ""))
     chat_ids = _parse_chat_ids_form(request.form)
+    # Bug4修复：正则模式下校验表达式合法性
+    if pattern and match == "regex":
+        import re
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            from urllib.parse import quote
+            return redirect(f"/?kw_err={quote(f'正则表达式非法：{e}')}")
     if pattern:
         db.update_keyword(kid, pattern, match, mode, replies, das, eas,
                           start_at=start_at, chat_ids=chat_ids)
@@ -183,14 +205,24 @@ def _parse_chat_ids_form(f):
 # ======== 定时任务 CRUD ========
 @flask_app.route("/sc/add", methods=["POST"])
 def sc_add():
-    db.add_schedule(**_sc_form(request.form))
+    try:
+        params = _sc_form(request.form)
+    except ValueError as e:
+        from urllib.parse import quote
+        return redirect(f"/?sc_err={quote(str(e))}")
+    db.add_schedule(**params)
     _reload()
     return redirect("/")
 
 
 @flask_app.route("/sc/edit/<int:sid>", methods=["POST"])
 def sc_edit(sid):
-    db.update_schedule(sid, **_sc_form(request.form))
+    try:
+        params = _sc_form(request.form)
+    except ValueError as e:
+        from urllib.parse import quote
+        return redirect(f"/?sc_err={quote(str(e))}")
+    db.update_schedule(sid, **params)
     _reload()
     return redirect("/")
 
@@ -219,9 +251,30 @@ def _sc_form(f):
     once = f.get("once", "0") == "1"
     if once:
         dt   = f.get("run_at", "").strip()
-        cron = (dt + ":00") if len(dt) == 16 else dt
+        # Bug3修复：一次性任务必须提供执行时间
+        if not dt:
+            raise ValueError("一次性任务必须填写执行时间")
+        # BugA修复：校验 run_at 是否为合法日期时间，防止非法值写入数据库
+        dt_full = (dt + ":00") if len(dt) == 16 else dt
+        try:
+            from datetime import datetime as _dt
+            _dt.fromisoformat(dt_full)
+        except ValueError:
+            raise ValueError(f"执行时间格式非法：{dt}")
+        cron = dt_full
     else:
         cron = f.get("cron", "").strip()
+        # Bug8修复：校验 cron 表达式合法性
+        if cron:
+            try:
+                from apscheduler.triggers.cron import CronTrigger
+                parts = cron.split()
+                if len(parts) != 5:
+                    raise ValueError("Cron 需要5个字段")
+                CronTrigger(minute=parts[0], hour=parts[1],
+                            day=parts[2], month=parts[3], day_of_week=parts[4])
+            except Exception as e:
+                raise ValueError(f"Cron 表达式非法：{e}")
     das = _parse_seconds(f, "sc_delete")
     return dict(
         name                 = f.get("name",        "").strip(),
@@ -397,6 +450,15 @@ def files_rename(fid):
 def files_delete(fid):
     if not session.get("files_auth"):
         return redirect("/files")
+    # Bug6修复：删前检查引用，有引用则拒绝
+    records = db.get_file_records()
+    target  = next((r for r in records if r["id"] == fid), None)
+    if target:
+        usages = db.get_file_ids_in_use(target["file_id"])
+        if usages:
+            names = "、".join(u["name"] for u in usages[:5])
+            return render_template("files.html", records=records,
+                                   err=f"⚠️ 文件被以下规则引用，无法删除：{names}"), 400
     db.soft_delete_file(fid)
     return redirect("/files")
 
@@ -453,8 +515,28 @@ def files_bulk_delete():
             ids.append(int(v))
         except (ValueError, TypeError):
             pass
-    if ids:
-        db.bulk_soft_delete_files(ids)
+    if not ids:
+        return redirect("/files")
+    # Bug6修复：批量删前检查引用，过滤掉被引用的文件，只删安全的
+    records  = db.get_file_records()
+    by_id    = {r["id"]: r for r in records}
+    safe_ids = []
+    blocked  = []
+    for fid in ids:
+        tgt = by_id.get(fid)
+        if not tgt:
+            continue
+        usages = db.get_file_ids_in_use(tgt["file_id"])
+        if usages:
+            blocked.append(tgt["file_name"] or str(fid))
+        else:
+            safe_ids.append(fid)
+    if safe_ids:
+        db.bulk_soft_delete_files(safe_ids)
+    if blocked:
+        names = "、".join(blocked[:5])
+        return render_template("files.html", records=db.get_file_records(),
+                               err=f"⚠️ 以下文件因被规则引用未删除：{names}"), 400
     return redirect("/files")
 
 
